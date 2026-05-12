@@ -129,6 +129,13 @@ export type ValidationPlan = {
   created_at: string;
 };
 
+export type AcceptanceStatus = {
+  completed_stages: string[];
+  backend_test_count: number;
+  frontend_build: string;
+  remaining_risks: string[];
+};
+
 export function getToken() {
   return window.localStorage.getItem(TOKEN_KEY);
 }
@@ -285,4 +292,8 @@ export async function checkValidationPlan(planId: string) {
 
 export async function exportValidationPlan(planId: string) {
   return request<{ id: string; filename: string; status: string; template_version: string }>(`/api/validation-plans/${planId}/export`, { method: "POST" });
+}
+
+export async function fetchAcceptanceStatus() {
+  return request<AcceptanceStatus>("/api/admin/acceptance-status");
 }

@@ -2,6 +2,7 @@ from fastapi import APIRouter
 
 from app.modules.auth.router import router as auth_router
 from app.modules.ai.router import router as ai_router
+from app.modules.admin.router import router as admin_router
 from app.modules.documents.router import router as documents_router
 from app.modules.health.router import router as health_router
 from app.modules.knowledge.router import router as knowledge_router
@@ -27,3 +28,4 @@ api_router.include_router(knowledge_router)
 api_router.include_router(ai_router)
 api_router.include_router(requirements_router)
 api_router.include_router(validation_plans_router)
+api_router.include_router(admin_router)

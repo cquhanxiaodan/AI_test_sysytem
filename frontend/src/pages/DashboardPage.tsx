@@ -1,8 +1,15 @@
-import { Card, Col, Descriptions, Row, Statistic, Tag, Typography } from "antd";
+import { Card, Col, Descriptions, List, Row, Statistic, Tag, Typography } from "antd";
+import { useEffect, useState } from "react";
+import { AcceptanceStatus, fetchAcceptanceStatus } from "../api/client";
 import { useProjects } from "../context/ProjectContext";
 
 export default function DashboardPage() {
   const { currentProject } = useProjects();
+  const [acceptance, setAcceptance] = useState<AcceptanceStatus | null>(null);
+
+  useEffect(() => {
+    fetchAcceptanceStatus().then(setAcceptance).catch(() => setAcceptance(null));
+  }, []);
 
   return (
     <section>
@@ -38,6 +45,21 @@ export default function DashboardPage() {
               ))}
             </Descriptions.Item>
           </Descriptions>
+        </Card>
+      )}
+      {acceptance && (
+        <Card title="MVP 验收状态" className="section-card">
+          <Descriptions column={2} size="small">
+            <Descriptions.Item label="已完成阶段">{acceptance.completed_stages.join(", ")}</Descriptions.Item>
+            <Descriptions.Item label="后端测试数">{acceptance.backend_test_count}</Descriptions.Item>
+            <Descriptions.Item label="前端构建">{acceptance.frontend_build}</Descriptions.Item>
+          </Descriptions>
+          <List
+            size="small"
+            header="剩余风险"
+            dataSource={acceptance.remaining_risks}
+            renderItem={(item) => <List.Item>{item}</List.Item>}
+          />
         </Card>
       )}
     </section>
