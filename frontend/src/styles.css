@@ -65,6 +65,10 @@ body {
   min-width: min(420px, 70vw);
 }
 
+.form-row {
+  margin-bottom: 16px;
+}
+
 .app-content {
   padding: 24px;
 }

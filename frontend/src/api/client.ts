@@ -78,6 +78,57 @@ export type TestPackageAsset = {
   created_at: string;
 };
 
+export type RiskItem = {
+  id: string;
+  project_id: string;
+  source_type: string;
+  source_id: string;
+  title: string;
+  description: string;
+  product_model: string | null;
+  test_object: string;
+  subsystem: string;
+  severity: string | null;
+  rpn: number | null;
+  failure_mode: string | null;
+  failure_effect: string | null;
+  root_cause: string | null;
+  control_measure: string | null;
+  suggested_test: string;
+  status: string;
+  created_at: string;
+};
+
+export type RequirementAnalysis = {
+  id: string;
+  project_id: string;
+  description: string;
+  parse_result: {
+    test_object: string;
+    change_type: string;
+    product_model: string | null;
+    subsystem: string;
+    missing_fields: string[];
+  };
+  recommendations: Array<{ group: string; title: string; source_type: string; source_id: string; reason: string; evidence: string }>;
+  status: string;
+  created_at: string;
+};
+
+export type ValidationPlan = {
+  id: string;
+  project_id: string;
+  requirement_analysis_id: string;
+  title: string;
+  template_version: string;
+  overview: string;
+  dut_description: string;
+  reference_documents: string[];
+  items: Array<{ sequence: number; title: string; group: string; objective: string; method: string; record_template: string; evidence: string }>;
+  status: string;
+  created_at: string;
+};
+
 export function getToken() {
   return window.localStorage.getItem(TOKEN_KEY);
 }
@@ -195,4 +246,43 @@ export async function generateRfidSupplierPackage(projectId: string) {
 
 export async function publishTestPackage(packageId: string) {
   return request<TestPackageAsset>(`/api/test-packages/${packageId}/publish`, { method: "POST" });
+}
+
+export async function fetchRisks(projectId?: string) {
+  const query = projectId ? `?project_id=${encodeURIComponent(projectId)}` : "";
+  return request<RiskItem[]>(`/api/risks${query}`);
+}
+
+export async function parseRisks(projectId: string, sourceType: string, content: string) {
+  return request<{ items: RiskItem[] }>("/api/risks/parse", {
+    method: "POST",
+    body: JSON.stringify({ project_id: projectId, source_type: sourceType, content }),
+  });
+}
+
+export async function createRequirementAnalysis(projectId: string, description: string) {
+  return request<RequirementAnalysis>("/api/requirement-analyses", {
+    method: "POST",
+    body: JSON.stringify({ project_id: projectId, description }),
+  });
+}
+
+export async function fetchValidationPlans(projectId?: string) {
+  const query = projectId ? `?project_id=${encodeURIComponent(projectId)}` : "";
+  return request<ValidationPlan[]>(`/api/validation-plans${query}`);
+}
+
+export async function createValidationPlan(requirementAnalysisId: string) {
+  return request<ValidationPlan>("/api/validation-plans", {
+    method: "POST",
+    body: JSON.stringify({ requirement_analysis_id: requirementAnalysisId }),
+  });
+}
+
+export async function checkValidationPlan(planId: string) {
+  return request<{ blocking: string[]; warnings: string[]; suggestions: string[] }>(`/api/validation-plans/${planId}/check`, { method: "POST" });
+}
+
+export async function exportValidationPlan(planId: string) {
+  return request<{ id: string; filename: string; status: string; template_version: string }>(`/api/validation-plans/${planId}/export`, { method: "POST" });
 }

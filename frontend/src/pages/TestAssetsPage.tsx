@@ -1,4 +1,4 @@
-import { Button, Card, Form, Input, message, Space, Table, Tabs, Tag, Typography } from "antd";
+import { Button, Card, Form, Input, message, Radio, Space, Table, Tabs, Tag, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useState } from "react";
 import {
@@ -7,6 +7,9 @@ import {
   fetchTestPackages,
   generateRfidSupplierPackage,
   publishTestPackage,
+  fetchRisks,
+  parseRisks,
+  RiskItem,
   splitDocumentToTestItems,
   TestItemAsset,
   TestPackageAsset,
@@ -17,6 +20,7 @@ export default function TestAssetsPage() {
   const { currentProject } = useProjects();
   const [items, setItems] = useState<TestItemAsset[]>([]);
   const [packages, setPackages] = useState<TestPackageAsset[]>([]);
+  const [risks, setRisks] = useState<RiskItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [form] = Form.useForm<{ documentId: string }>();
 
@@ -26,6 +30,7 @@ export default function TestAssetsPage() {
     try {
       setItems(await fetchTestItems(currentProject.id));
       setPackages(await fetchTestPackages(currentProject.id));
+      setRisks(await fetchRisks(currentProject.id));
     } finally {
       setLoading(false);
     }
@@ -57,6 +62,13 @@ export default function TestAssetsPage() {
   async function publishPackage(packageAsset: TestPackageAsset) {
     await publishTestPackage(packageAsset.id);
     message.success("测试归口包已发布");
+    await loadItems();
+  }
+
+  async function parseRiskSource(values: { sourceType: string; content: string }) {
+    if (!currentProject) return;
+    const result = await parseRisks(currentProject.id, values.sourceType, values.content);
+    message.success(`已解析 ${result.items.length} 条风险项`);
     await loadItems();
   }
 
@@ -93,6 +105,14 @@ export default function TestAssetsPage() {
     },
   ];
 
+  const riskColumns: ColumnsType<RiskItem> = [
+    { title: "来源", dataIndex: "source_type", render: (value) => <Tag>{value}</Tag> },
+    { title: "风险标题", dataIndex: "title" },
+    { title: "子系统", dataIndex: "subsystem" },
+    { title: "RPN", dataIndex: "rpn", render: (value) => value ?? "-" },
+    { title: "建议测试", dataIndex: "suggested_test" },
+  ];
+
   return (
     <section>
       <Typography.Title level={2}>测试资产</Typography.Title>
@@ -127,7 +147,24 @@ export default function TestAssetsPage() {
                 </Space>
               ),
             },
-            { key: "risks", label: "风险知识源", children: <Typography.Text type="secondary">风险项将在后续阶段接入。</Typography.Text> },
+            {
+              key: "risks",
+              label: "风险知识源",
+              children: (
+                <Space direction="vertical" className="full-width" size="middle">
+                  <Form layout="vertical" onFinish={parseRiskSource} initialValues={{ sourceType: "jira" }}>
+                    <Form.Item label="来源类型" name="sourceType">
+                      <Radio.Group options={[{ label: "Jira", value: "jira" }, { label: "DFMEA", value: "dfmea" }]} />
+                    </Form.Item>
+                    <Form.Item label="CSV 内容" name="content" rules={[{ required: true, message: "请输入 CSV 内容" }]}>
+                      <Input.TextArea rows={5} placeholder="例如：key,title,description\nG99-1,RFID读取失败,更换供应商后偶发读取失败" />
+                    </Form.Item>
+                    <Button type="primary" htmlType="submit">解析风险源</Button>
+                  </Form>
+                  <Table rowKey="id" loading={loading} columns={riskColumns} dataSource={risks} pagination={false} />
+                </Space>
+              ),
+            },
           ]}
         />
       </Card>

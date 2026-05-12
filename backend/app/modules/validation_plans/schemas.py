@@ -1,0 +1,46 @@
+from datetime import datetime
+
+from pydantic import BaseModel
+
+
+class ValidationPlanItem(BaseModel):
+    sequence: int
+    title: str
+    group: str
+    objective: str
+    method: str
+    record_template: str
+    evidence: str
+
+
+class ValidationPlanRead(BaseModel):
+    id: str
+    project_id: str
+    requirement_analysis_id: str
+    title: str
+    template_version: str
+    overview: str
+    dut_description: str
+    reference_documents: list[str]
+    items: list[ValidationPlanItem]
+    status: str
+    created_at: datetime
+
+
+class ValidationPlanCreateRequest(BaseModel):
+    requirement_analysis_id: str
+
+
+class ValidationPlanCheckResult(BaseModel):
+    blocking: list[str]
+    warnings: list[str]
+    suggestions: list[str]
+
+
+class ExportRecord(BaseModel):
+    id: str
+    validation_plan_id: str
+    filename: str
+    template_version: str
+    status: str
+    created_at: datetime
