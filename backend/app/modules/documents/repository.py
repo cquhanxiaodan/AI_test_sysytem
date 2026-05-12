@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 from hashlib import sha256
 from uuid import uuid4
 
+from app.core.storage import get_storage_backend
 from app.modules.documents.schemas import (
     DocumentDuplicateResult,
     DocumentLabelSuggestion,
@@ -9,7 +10,6 @@ from app.modules.documents.schemas import (
 )
 
 DOCUMENTS: dict[str, DocumentRead] = {}
-DOCUMENT_CONTENTS: dict[str, bytes] = {}
 
 
 def create_document(
@@ -22,13 +22,16 @@ def create_document(
 ) -> DocumentRead:
     file_hash = sha256(content).hexdigest()
     duplicate_results = find_duplicates(file_hash)
+    document_id = f"doc-{uuid4()}"
+    storage_path = get_storage_backend().put_bytes(f"documents/{document_id}/{filename}", content)
     document = DocumentRead(
-        id=f"doc-{uuid4()}",
+        id=document_id,
         project_id=project_id,
         filename=filename,
         content_type=content_type,
         size_bytes=len(content),
         file_hash=file_hash,
+        storage_path=storage_path,
         status="pending_label" if duplicate_results == [] else "pending_duplicate_confirmation",
         labels={},
         label_suggestions=infer_label_suggestions(filename),
@@ -37,7 +40,6 @@ def create_document(
         created_at=datetime.now(UTC),
     )
     DOCUMENTS[document.id] = document
-    DOCUMENT_CONTENTS[document.id] = content
     return document
 
 
@@ -53,7 +55,10 @@ def get_document(document_id: str) -> DocumentRead | None:
 
 
 def get_document_content(document_id: str) -> bytes | None:
-    return DOCUMENT_CONTENTS.get(document_id)
+    document = DOCUMENTS.get(document_id)
+    if document is None:
+        return None
+    return get_storage_backend().get_bytes(document.storage_path)
 
 
 def update_labels(document_id: str, labels: dict[str, str]) -> DocumentRead | None:

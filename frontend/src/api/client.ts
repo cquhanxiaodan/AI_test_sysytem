@@ -23,6 +23,7 @@ export type DocumentItem = {
   content_type: string;
   size_bytes: number;
   file_hash: string;
+  storage_path: string;
   status: string;
   labels: Record<string, string>;
   label_suggestions: Array<{ label_key: string; label_value: string; confidence: number; evidence: string }>;
@@ -126,6 +127,17 @@ export type ValidationPlan = {
   reference_documents: string[];
   items: Array<{ sequence: number; title: string; group: string; objective: string; method: string; record_template: string; evidence: string }>;
   status: string;
+  created_at: string;
+};
+
+export type ExportRecord = {
+  id: string;
+  validation_plan_id: string;
+  filename: string;
+  template_version: string;
+  status: string;
+  storage_path: string;
+  download_url: string;
   created_at: string;
 };
 
@@ -291,7 +303,7 @@ export async function checkValidationPlan(planId: string) {
 }
 
 export async function exportValidationPlan(planId: string) {
-  return request<{ id: string; filename: string; status: string; template_version: string }>(`/api/validation-plans/${planId}/export`, { method: "POST" });
+  return request<ExportRecord>(`/api/validation-plans/${planId}/export`, { method: "POST" });
 }
 
 export async function fetchAcceptanceStatus() {

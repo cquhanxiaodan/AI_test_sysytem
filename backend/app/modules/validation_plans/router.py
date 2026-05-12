@@ -1,4 +1,7 @@
+from pathlib import Path
+
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import FileResponse
 
 from app.modules.auth.dependencies import get_current_user
 from app.modules.auth.seed_data import SeedUser
@@ -9,7 +12,7 @@ from app.modules.validation_plans.schemas import (
     ValidationPlanCreateRequest,
     ValidationPlanRead,
 )
-from app.modules.validation_plans.service import check_plan, create_plan, export_plan, get_plan, list_plans
+from app.modules.validation_plans.service import check_plan, create_plan, export_plan, get_export, get_plan, list_plans
 
 router = APIRouter(prefix="/validation-plans", tags=["validation-plans"])
 
@@ -57,3 +60,15 @@ def export(plan_id: str, current_user: SeedUser = Depends(get_current_user)) -> 
     if record is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Validation plan not found")
     return record
+
+
+@router.get("/exports/{export_id}/download")
+def download_export(export_id: str, current_user: SeedUser = Depends(get_current_user)) -> FileResponse:
+    record = get_export(export_id)
+    if record is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Export not found")
+    plan = detail(record.validation_plan_id, current_user)
+    path = Path(record.storage_path)
+    if not path.exists():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Export file not found")
+    return FileResponse(path, media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document", filename=record.filename)

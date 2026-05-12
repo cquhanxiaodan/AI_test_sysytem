@@ -104,6 +104,10 @@
 *.log
 **/logs/
 
+# Generated local artifacts
+backend/storage/
+backend/templates/validation-plan-v1.docx
+
 # Environment and secrets
 **/.env
 **/.env.local

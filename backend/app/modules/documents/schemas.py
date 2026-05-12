@@ -24,6 +24,7 @@ class DocumentRead(BaseModel):
     content_type: str
     size_bytes: int
     file_hash: str
+    storage_path: str
     status: str
     labels: dict[str, str]
     label_suggestions: list[DocumentLabelSuggestion]

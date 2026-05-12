@@ -1,7 +1,10 @@
 from datetime import UTC, datetime
+from pathlib import Path
 from uuid import uuid4
 
+from app.core.config import get_settings
 from app.modules.requirements.service import get_analysis
+from app.modules.validation_plans.docx_exporter import render_validation_plan_docx
 from app.modules.validation_plans.schemas import (
     ExportRecord,
     ValidationPlanCheckResult,
@@ -77,13 +80,24 @@ def export_plan(plan_id: str) -> ExportRecord | None:
     plan = get_plan(plan_id)
     if plan is None:
         return None
+    export_id = f"export-{uuid4()}"
+    settings = get_settings()
+    filename = f"{plan.title}.docx"
+    output_path = Path(settings.local_storage_root) / "exports" / export_id / filename
+    render_validation_plan_docx(plan, Path(settings.validation_plan_template_path), output_path)
     record = ExportRecord(
-        id=f"export-{uuid4()}",
+        id=export_id,
         validation_plan_id=plan_id,
-        filename=f"{plan.title}.docx",
+        filename=filename,
         template_version=plan.template_version,
         status="generated",
+        storage_path=str(output_path),
+        download_url=f"/api/validation-plans/exports/{export_id}/download",
         created_at=datetime.now(UTC),
     )
     EXPORTS[record.id] = record
     return record
+
+
+def get_export(export_id: str) -> ExportRecord | None:
+    return EXPORTS.get(export_id)

@@ -1,7 +1,7 @@
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.modules.documents.repository import DOCUMENTS, DOCUMENT_CONTENTS
+from app.modules.documents.repository import DOCUMENTS
 from app.modules.parsing.service import CHUNKS, TASKS
 
 
@@ -10,7 +10,6 @@ client = TestClient(app)
 
 def setup_function() -> None:
     DOCUMENTS.clear()
-    DOCUMENT_CONTENTS.clear()
     TASKS.clear()
     CHUNKS.clear()
 

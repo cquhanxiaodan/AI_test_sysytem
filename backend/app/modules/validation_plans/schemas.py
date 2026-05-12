@@ -43,4 +43,6 @@ class ExportRecord(BaseModel):
     filename: str
     template_version: str
     status: str
+    storage_path: str
+    download_url: str
     created_at: datetime

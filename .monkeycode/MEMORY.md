@@ -64,3 +64,12 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 - Instructions:
   - 用户希望 Agent 按既定实施计划持续实现后续任务。
   - 遇到明确阻塞、需求冲突或需要用户决策的事项时再暂停说明。
+
+[增强后的导出与存储方式]
+- Date: 2026-05-12
+- Context: Agent 在执行 MVP 后续增强时发现
+- Category: 代码模式
+- Instructions:
+  - 验证方案 Word 导出使用 `docxtpl` 渲染，默认模板路径为 `templates/validation-plan-v1.docx`。
+  - 文件内容通过 `app.core.storage.StorageBackend` 访问，当前实现为 `LocalStorageBackend`，根目录由 `local_storage_root` 配置。
+  - 后续接入 MinIO 时优先替换 storage backend，业务模块继续使用 `put_bytes` 和 `get_bytes` 接口。

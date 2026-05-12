@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -46,4 +48,10 @@ def test_create_check_and_export_validation_plan() -> None:
 
     exported = client.post(f"/api/validation-plans/{plan['id']}/export", headers=headers)
     assert exported.status_code == 200
-    assert exported.json()["filename"].endswith(".docx")
+    export_record = exported.json()
+    assert export_record["filename"].endswith(".docx")
+    assert Path(export_record["storage_path"]).exists()
+
+    downloaded = client.get(export_record["download_url"], headers=headers)
+    assert downloaded.status_code == 200
+    assert downloaded.content.startswith(b"PK")

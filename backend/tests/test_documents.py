@@ -1,7 +1,7 @@
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.modules.documents.repository import DOCUMENTS
+from app.modules.documents.repository import DOCUMENTS, get_document_content
 
 
 client = TestClient(app)
@@ -28,6 +28,8 @@ def test_upload_document_suggests_labels() -> None:
     assert response.status_code == 200
     document = response.json()["document"]
     assert document["status"] == "pending_label"
+    assert document["storage_path"]
+    assert get_document_content(document["id"]) == b"demo"
     assert {item["label_key"] for item in document["label_suggestions"]} >= {"product_model", "subsystem", "document_type"}
 
 

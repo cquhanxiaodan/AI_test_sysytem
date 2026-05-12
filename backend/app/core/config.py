@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     minio_secret_key: str = "minioadmin"
     minio_secure: bool = False
     minio_bucket: str = "gene-test-documents"
+    local_storage_root: str = "storage"
+    validation_plan_template_path: str = "templates/validation-plan-v1.docx"
 
     cors_origins: list[str] = ["http://localhost:5173"]
 
