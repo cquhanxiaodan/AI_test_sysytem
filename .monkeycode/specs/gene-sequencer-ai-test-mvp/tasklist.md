@@ -1,132 +1,132 @@
 # 需求实施计划
 
-- [ ] 1. 搭建项目基础结构和运行骨架
-  - [ ] 1.1 创建前后端和基础服务目录结构
+- [x] 1. 搭建项目基础结构和运行骨架
+  - [x] 1.1 创建前后端和基础服务目录结构
     - 建立 `frontend`、`backend`、`worker`、`deploy`、`templates` 目录。
     - 后端按 `auth`、`projects`、`documents`、`parsing`、`knowledge`、`test_items`、`test_packages`、`risks`、`requirements`、`validation_plans`、`ai` 模块分层。
     - 覆盖需求：`requirements.md` 第 2、3、4 节；`architecture.md` 第 3、4、13 节。
-  - [ ] 1.2 配置 Docker Compose 本地开发环境
+  - [x] 1.2 配置 Docker Compose 本地开发环境
     - 配置 PostgreSQL、Redis、MinIO、backend-api、worker、frontend 服务。
     - 为 PostgreSQL 启用 pgvector 扩展初始化脚本。
     - 覆盖需求：`architecture.md` 第 5、13 节。
-  - [ ] 1.3 建立 FastAPI 应用、Celery Worker 和数据库连接
+  - [x] 1.3 建立 FastAPI 应用、Celery Worker 和数据库连接
     - 实现应用启动、健康检查、数据库 session、Redis/Celery 配置、MinIO 客户端封装。
     - 覆盖需求：`architecture.md` 第 4、5、6 节。
-  - [ ] 1.4 建立 React 前端基础应用和路由框架
+  - [x] 1.4 建立 React 前端基础应用和路由框架
     - 实现登录、项目工作台、资料池、需求分析、测试资产、验证方案等一级路由壳。
     - 覆盖需求：`requirements.md` 第 3、4、11、14 节。
   - [ ]* 1.5 编写基础服务启动和健康检查测试
     - 验证 API、Worker、数据库、Redis、MinIO 可连接。
     - 覆盖验收：`acceptance-test-plan.md` 端到端前置条件。
 
-- [ ] 2. 实现用户、角色、项目和权限基础能力
-  - [ ] 2.1 实现用户、角色和登录接口
+- [x] 2. 实现用户、角色、项目和权限基础能力
+  - [x] 2.1 实现用户、角色和登录接口
     - 创建 `users`、`roles`、`user_roles` 数据表和 ORM 模型。
     - 实现 `POST /api/auth/login`、`GET /api/auth/me` 和用户角色查询。
     - 覆盖需求：`requirements.md` 第 3 节；`data-api.md` 第 2、10 节。
-  - [ ] 2.2 实现项目和项目成员管理
+  - [x] 2.2 实现项目和项目成员管理
     - 创建 `projects`、`project_members`、`project_document_rules` 数据表和 ORM 模型。
     - 实现项目列表、项目详情、项目成员和资料范围规则 API。
     - 覆盖需求：`requirements.md` 第 3、4 节；`data-api.md` 第 3、10 节。
-  - [ ] 2.3 实现 RBAC、项目 ACL 和资料访问过滤中间件
+  - [x] 2.3 实现 RBAC、项目 ACL 和资料访问过滤中间件
     - 对资料、需求分析、测试资产、验证方案 API 加入权限检查。
     - 为知识检索统一提供项目资料范围过滤条件。
     - 覆盖需求：`requirements.md` 第 3、4 节；`architecture.md` 第 12 节。
-  - [ ] 2.4 实现前端登录、项目列表和项目切换页面
+  - [x] 2.4 实现前端登录、项目列表和项目切换页面
     - 登录后展示用户可访问项目，顶部保持当前项目上下文。
     - 覆盖需求：`requirements.md` 第 3、4 节。
-  - [ ]* 2.5 编写权限与项目隔离测试
+  - [x]* 2.5 编写权限与项目隔离测试
     - 验证未授权项目 API 返回 403，检索范围不跨项目。
     - 覆盖验收：`acceptance-test-plan.md` TC-AUTH-001、TC-AUTH-002、TC-AUTH-003。
 
-- [ ] 3. 实现统一资料池上传、元数据和审核流程
-  - [ ] 3.1 实现资料、标签建议、重复结果和审核记录模型
+- [x] 3. 实现统一资料池上传、元数据和审核流程
+  - [x] 3.1 实现资料、标签建议、重复结果和审核记录模型
     - 创建 `documents`、`document_label_suggestions`、`document_duplicate_results`、`document_review_records` 表。
     - 支持资料状态：待解析、待补充标签、待去重确认、待审核、已发布、已驳回、已废止。
     - 覆盖需求：`requirements.md` 第 4、5 节；`data-api.md` 第 4 节。
-  - [ ] 3.2 实现资料上传和对象存储
+  - [x] 3.2 实现资料上传和对象存储
     - 实现 `POST /api/documents/upload`，保存原始文件到 MinIO 并创建资料元数据。
     - 支持 Word、PDF、Excel 文件类型和文件 hash 计算。
     - 覆盖需求：`requirements.md` 第 5 节；`architecture.md` 第 6 节。
-  - [ ] 3.3 实现资料池列表、详情和标签编辑 API
+  - [x] 3.3 实现资料池列表、详情和标签编辑 API
     - 实现资料筛选、详情、标签更新、解析状态查询、审核记录查询。
     - 覆盖需求：`requirements.md` 第 4、5 节；`data-api.md` 第 10 节。
-  - [ ] 3.4 实现资料上传、资料池列表和标签确认前端页面
+  - [x] 3.4 实现资料上传、资料池列表和标签确认前端页面
     - 展示系统推荐标签、置信度、依据、用户确认值和缺失必填项。
     - 覆盖需求：`requirements.md` 第 5 节。
-  - [ ] 3.5 实现资料提交审核和管理员审核页面
+  - [x] 3.5 实现资料提交审核和管理员审核页面
     - 支持通过发布、修改标签后通过、要求补充、驳回、标记重复、合并为新版本。
     - 覆盖需求：`requirements.md` 第 5 节。
-  - [ ]* 3.6 编写资料上传和审核流程集成测试
+  - [x]* 3.6 编写资料上传和审核流程集成测试
     - 验证上传、补充标签、提交审核、管理员发布完整状态流转。
     - 覆盖验收：`acceptance-test-plan.md` TC-DOC-002、TC-REV-001、TC-REV-002。
 
-- [ ] 4. 实现文档解析、切片、标签识别和去重检测
-  - [ ] 4.1 实现 Word、PDF、Excel 文档解析器
+- [x] 4. 实现文档解析、切片、标签识别和去重检测
+  - [x] 4.1 实现 Word、PDF、Excel 文档解析器
     - Word 解析标题、段落、表格和章节结构；PDF 提取文本和页码；Excel 提取工作表、表头和行数据。
     - 解析结果保存为统一文本和结构化片段。
     - 覆盖需求：`requirements.md` 第 4、5、7、10 节；`architecture.md` 第 6、7 节。
-  - [ ] 4.2 实现文档切片和向量化入库
+  - [x] 4.2 实现文档切片和向量化入库
     - 创建 `document_chunks` 表和向量索引。
     - 按章节、表格和段落切片，保留页码、章节号、来源文档信息。
     - 覆盖需求：`architecture.md` 第 8 节；`data-api.md` 第 4 节。
-  - [ ] 4.3 实现 AI 标签识别任务
+  - [x] 4.3 实现 AI 标签识别任务
     - 按 `document_label_extraction` Schema 输出文档类型、产品型号、对象、子系统、版本、变更类型和缺失标签。
     - 低置信度标签进入用户确认。
     - 覆盖需求：`requirements.md` 第 5、6 节；`ai-prompt-schema.md` 第 4 节。
-  - [ ] 4.4 实现重复资料检测
+  - [x] 4.4 实现重复资料检测
     - 文件级 hash、内容 hash、摘要向量相似度三层检测。
     - 输出完全重复、高度相似、疑似相关结果和处理建议。
     - 覆盖需求：`requirements.md` 第 5 节；`architecture.md` 第 6 节。
-  - [ ] 4.5 实现解析和 AI 任务状态查询
+  - [x] 4.5 实现解析和 AI 任务状态查询
     - 所有解析、切片、标签识别、去重任务异步执行并提供任务进度。
     - 覆盖需求：`architecture.md` 第 6、9 节。
-  - [ ]* 4.6 编写文档解析、标签识别和去重测试
+  - [x]* 4.6 编写文档解析、标签识别和去重测试
     - 验证 RFID 示例文档能识别验证方案、DNBSEQ-G99、RFID、供应商变更。
     - 覆盖验收：`acceptance-test-plan.md` TC-DOC-001、TC-DOC-003、TC-DOC-004。
 
-- [ ] 5. 实现测试方案拆分和测试条目资产库
-  - [ ] 5.1 实现测试条目资产、工具和依据数据模型
+- [x] 5. 实现测试方案拆分和测试条目资产库
+  - [x] 5.1 实现测试条目资产、工具和依据数据模型
     - 创建 `test_item_assets`、`test_item_tools`、`test_item_evidences` 表和 CRUD Repository。
     - 支持条目来源、分类标签、测试内容、记录模板、审核状态和复用范围。
     - 覆盖需求：`requirements.md` 第 7、8 节；`data-api.md` 第 5 节。
-  - [ ] 5.2 实现验证方案章节拆分服务
+  - [x] 5.2 实现验证方案章节拆分服务
     - 定位 `2. 测试项目列表` 和 `3.x` 测试项目章节。
     - 提取 `3.x.1` 到 `3.x.7` 内容，补齐样本量和预估测试用时。
     - 覆盖需求：`requirements.md` 第 7、13 节；`ai-prompt-schema.md` 第 5 节。
-  - [ ] 5.3 实现测试条目分类映射服务
+  - [x] 5.3 实现测试条目分类映射服务
     - 对每个拆分条目识别测试对象、主子系统、关联子系统、测试层级、测试类型和风险标签。
     - 输出分类置信度和分类依据。
     - 覆盖需求：`requirements.md` 第 6、7、8 节；`ai-prompt-schema.md` 第 6 节。
-  - [ ] 5.4 实现拆分确认和条目资产发布流程
+  - [x] 5.4 实现拆分确认和条目资产发布流程
     - 提供 `split-result`、`confirm-split-result` API。
     - 用户可确认或修改拆分条目，管理员审核后发布为可复用资产。
     - 覆盖需求：`requirements.md` 第 7、8 节；`data-api.md` 第 10 节。
-  - [ ] 5.5 实现测试条目资产库前端列表和详情页
+  - [x] 5.5 实现测试条目资产库前端列表和详情页
     - 支持按对象、子系统、测试层级、测试类型、来源文档、状态筛选。
     - 详情展示基本信息、分类标签、测试内容、工具、记录模板、依据来源、审核记录。
     - 覆盖需求：`requirements.md` 第 8 节。
-  - [ ]* 5.6 编写 RFID 验证方案拆分验收测试
+  - [x]* 5.6 编写 RFID 验证方案拆分验收测试
     - 验证示例方案拆出 5 个条目并保留目的、标准、方法、工具、步骤、记录模板。
     - 覆盖验收：`acceptance-test-plan.md` TC-SPLIT-001、TC-SPLIT-002。
 
-- [ ] 6. 实现测试归口资产库
-  - [ ] 6.1 实现测试归口包和归口条目关系模型
+- [x] 6. 实现测试归口资产库
+  - [x] 6.1 实现测试归口包和归口条目关系模型
     - 创建 `test_package_assets`、`test_package_items` 表和 CRUD Repository。
     - 支持对象归口、变更归口、子系统归口、系统级归口。
     - 覆盖需求：`requirements.md` 第 9 节；`data-api.md` 第 6 节。
-  - [ ] 6.2 实现测试归口包候选生成服务
+  - [x] 6.2 实现测试归口包候选生成服务
     - 根据同一验证方案中的对象、变更类型和拆分条目生成候选归口包。
     - 标记包内条目的必测、建议、条件触发关系和触发条件。
     - 覆盖需求：`requirements.md` 第 9 节；`ai-prompt-schema.md` 第 7 节。
-  - [ ] 6.3 实现归口包确认、编辑和审核 API
+  - [x] 6.3 实现归口包确认、编辑和审核 API
     - 支持包名、对象、变更类型、适用范围、条目集合、推荐级别和触发条件编辑。
     - 审核发布后参与需求分析匹配。
     - 覆盖需求：`requirements.md` 第 9、11 节。
-  - [ ] 6.4 实现测试归口资产库前端页面
+  - [x] 6.4 实现测试归口资产库前端页面
     - 展示归口包列表、包内条目、必测/建议/条件触发关系、来源依据和版本记录。
     - 覆盖需求：`requirements.md` 第 9 节。
-  - [ ]* 6.5 编写 RFID 供应商变更归口包测试
+  - [x]* 6.5 编写 RFID 供应商变更归口包测试
     - 验证系统生成 RFID 供应商变更验证包，包含装配、初始化、读取、写入、安规 EMC 条目。
     - 覆盖验收：`acceptance-test-plan.md` TC-SPLIT-003。
 
