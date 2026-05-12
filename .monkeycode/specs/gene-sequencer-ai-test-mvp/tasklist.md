@@ -1,0 +1,254 @@
+# 需求实施计划
+
+- [ ] 1. 搭建项目基础结构和运行骨架
+  - [ ] 1.1 创建前后端和基础服务目录结构
+    - 建立 `frontend`、`backend`、`worker`、`deploy`、`templates` 目录。
+    - 后端按 `auth`、`projects`、`documents`、`parsing`、`knowledge`、`test_items`、`test_packages`、`risks`、`requirements`、`validation_plans`、`ai` 模块分层。
+    - 覆盖需求：`requirements.md` 第 2、3、4 节；`architecture.md` 第 3、4、13 节。
+  - [ ] 1.2 配置 Docker Compose 本地开发环境
+    - 配置 PostgreSQL、Redis、MinIO、backend-api、worker、frontend 服务。
+    - 为 PostgreSQL 启用 pgvector 扩展初始化脚本。
+    - 覆盖需求：`architecture.md` 第 5、13 节。
+  - [ ] 1.3 建立 FastAPI 应用、Celery Worker 和数据库连接
+    - 实现应用启动、健康检查、数据库 session、Redis/Celery 配置、MinIO 客户端封装。
+    - 覆盖需求：`architecture.md` 第 4、5、6 节。
+  - [ ] 1.4 建立 React 前端基础应用和路由框架
+    - 实现登录、项目工作台、资料池、需求分析、测试资产、验证方案等一级路由壳。
+    - 覆盖需求：`requirements.md` 第 3、4、11、14 节。
+  - [ ]* 1.5 编写基础服务启动和健康检查测试
+    - 验证 API、Worker、数据库、Redis、MinIO 可连接。
+    - 覆盖验收：`acceptance-test-plan.md` 端到端前置条件。
+
+- [ ] 2. 实现用户、角色、项目和权限基础能力
+  - [ ] 2.1 实现用户、角色和登录接口
+    - 创建 `users`、`roles`、`user_roles` 数据表和 ORM 模型。
+    - 实现 `POST /api/auth/login`、`GET /api/auth/me` 和用户角色查询。
+    - 覆盖需求：`requirements.md` 第 3 节；`data-api.md` 第 2、10 节。
+  - [ ] 2.2 实现项目和项目成员管理
+    - 创建 `projects`、`project_members`、`project_document_rules` 数据表和 ORM 模型。
+    - 实现项目列表、项目详情、项目成员和资料范围规则 API。
+    - 覆盖需求：`requirements.md` 第 3、4 节；`data-api.md` 第 3、10 节。
+  - [ ] 2.3 实现 RBAC、项目 ACL 和资料访问过滤中间件
+    - 对资料、需求分析、测试资产、验证方案 API 加入权限检查。
+    - 为知识检索统一提供项目资料范围过滤条件。
+    - 覆盖需求：`requirements.md` 第 3、4 节；`architecture.md` 第 12 节。
+  - [ ] 2.4 实现前端登录、项目列表和项目切换页面
+    - 登录后展示用户可访问项目，顶部保持当前项目上下文。
+    - 覆盖需求：`requirements.md` 第 3、4 节。
+  - [ ]* 2.5 编写权限与项目隔离测试
+    - 验证未授权项目 API 返回 403，检索范围不跨项目。
+    - 覆盖验收：`acceptance-test-plan.md` TC-AUTH-001、TC-AUTH-002、TC-AUTH-003。
+
+- [ ] 3. 实现统一资料池上传、元数据和审核流程
+  - [ ] 3.1 实现资料、标签建议、重复结果和审核记录模型
+    - 创建 `documents`、`document_label_suggestions`、`document_duplicate_results`、`document_review_records` 表。
+    - 支持资料状态：待解析、待补充标签、待去重确认、待审核、已发布、已驳回、已废止。
+    - 覆盖需求：`requirements.md` 第 4、5 节；`data-api.md` 第 4 节。
+  - [ ] 3.2 实现资料上传和对象存储
+    - 实现 `POST /api/documents/upload`，保存原始文件到 MinIO 并创建资料元数据。
+    - 支持 Word、PDF、Excel 文件类型和文件 hash 计算。
+    - 覆盖需求：`requirements.md` 第 5 节；`architecture.md` 第 6 节。
+  - [ ] 3.3 实现资料池列表、详情和标签编辑 API
+    - 实现资料筛选、详情、标签更新、解析状态查询、审核记录查询。
+    - 覆盖需求：`requirements.md` 第 4、5 节；`data-api.md` 第 10 节。
+  - [ ] 3.4 实现资料上传、资料池列表和标签确认前端页面
+    - 展示系统推荐标签、置信度、依据、用户确认值和缺失必填项。
+    - 覆盖需求：`requirements.md` 第 5 节。
+  - [ ] 3.5 实现资料提交审核和管理员审核页面
+    - 支持通过发布、修改标签后通过、要求补充、驳回、标记重复、合并为新版本。
+    - 覆盖需求：`requirements.md` 第 5 节。
+  - [ ]* 3.6 编写资料上传和审核流程集成测试
+    - 验证上传、补充标签、提交审核、管理员发布完整状态流转。
+    - 覆盖验收：`acceptance-test-plan.md` TC-DOC-002、TC-REV-001、TC-REV-002。
+
+- [ ] 4. 实现文档解析、切片、标签识别和去重检测
+  - [ ] 4.1 实现 Word、PDF、Excel 文档解析器
+    - Word 解析标题、段落、表格和章节结构；PDF 提取文本和页码；Excel 提取工作表、表头和行数据。
+    - 解析结果保存为统一文本和结构化片段。
+    - 覆盖需求：`requirements.md` 第 4、5、7、10 节；`architecture.md` 第 6、7 节。
+  - [ ] 4.2 实现文档切片和向量化入库
+    - 创建 `document_chunks` 表和向量索引。
+    - 按章节、表格和段落切片，保留页码、章节号、来源文档信息。
+    - 覆盖需求：`architecture.md` 第 8 节；`data-api.md` 第 4 节。
+  - [ ] 4.3 实现 AI 标签识别任务
+    - 按 `document_label_extraction` Schema 输出文档类型、产品型号、对象、子系统、版本、变更类型和缺失标签。
+    - 低置信度标签进入用户确认。
+    - 覆盖需求：`requirements.md` 第 5、6 节；`ai-prompt-schema.md` 第 4 节。
+  - [ ] 4.4 实现重复资料检测
+    - 文件级 hash、内容 hash、摘要向量相似度三层检测。
+    - 输出完全重复、高度相似、疑似相关结果和处理建议。
+    - 覆盖需求：`requirements.md` 第 5 节；`architecture.md` 第 6 节。
+  - [ ] 4.5 实现解析和 AI 任务状态查询
+    - 所有解析、切片、标签识别、去重任务异步执行并提供任务进度。
+    - 覆盖需求：`architecture.md` 第 6、9 节。
+  - [ ]* 4.6 编写文档解析、标签识别和去重测试
+    - 验证 RFID 示例文档能识别验证方案、DNBSEQ-G99、RFID、供应商变更。
+    - 覆盖验收：`acceptance-test-plan.md` TC-DOC-001、TC-DOC-003、TC-DOC-004。
+
+- [ ] 5. 实现测试方案拆分和测试条目资产库
+  - [ ] 5.1 实现测试条目资产、工具和依据数据模型
+    - 创建 `test_item_assets`、`test_item_tools`、`test_item_evidences` 表和 CRUD Repository。
+    - 支持条目来源、分类标签、测试内容、记录模板、审核状态和复用范围。
+    - 覆盖需求：`requirements.md` 第 7、8 节；`data-api.md` 第 5 节。
+  - [ ] 5.2 实现验证方案章节拆分服务
+    - 定位 `2. 测试项目列表` 和 `3.x` 测试项目章节。
+    - 提取 `3.x.1` 到 `3.x.7` 内容，补齐样本量和预估测试用时。
+    - 覆盖需求：`requirements.md` 第 7、13 节；`ai-prompt-schema.md` 第 5 节。
+  - [ ] 5.3 实现测试条目分类映射服务
+    - 对每个拆分条目识别测试对象、主子系统、关联子系统、测试层级、测试类型和风险标签。
+    - 输出分类置信度和分类依据。
+    - 覆盖需求：`requirements.md` 第 6、7、8 节；`ai-prompt-schema.md` 第 6 节。
+  - [ ] 5.4 实现拆分确认和条目资产发布流程
+    - 提供 `split-result`、`confirm-split-result` API。
+    - 用户可确认或修改拆分条目，管理员审核后发布为可复用资产。
+    - 覆盖需求：`requirements.md` 第 7、8 节；`data-api.md` 第 10 节。
+  - [ ] 5.5 实现测试条目资产库前端列表和详情页
+    - 支持按对象、子系统、测试层级、测试类型、来源文档、状态筛选。
+    - 详情展示基本信息、分类标签、测试内容、工具、记录模板、依据来源、审核记录。
+    - 覆盖需求：`requirements.md` 第 8 节。
+  - [ ]* 5.6 编写 RFID 验证方案拆分验收测试
+    - 验证示例方案拆出 5 个条目并保留目的、标准、方法、工具、步骤、记录模板。
+    - 覆盖验收：`acceptance-test-plan.md` TC-SPLIT-001、TC-SPLIT-002。
+
+- [ ] 6. 实现测试归口资产库
+  - [ ] 6.1 实现测试归口包和归口条目关系模型
+    - 创建 `test_package_assets`、`test_package_items` 表和 CRUD Repository。
+    - 支持对象归口、变更归口、子系统归口、系统级归口。
+    - 覆盖需求：`requirements.md` 第 9 节；`data-api.md` 第 6 节。
+  - [ ] 6.2 实现测试归口包候选生成服务
+    - 根据同一验证方案中的对象、变更类型和拆分条目生成候选归口包。
+    - 标记包内条目的必测、建议、条件触发关系和触发条件。
+    - 覆盖需求：`requirements.md` 第 9 节；`ai-prompt-schema.md` 第 7 节。
+  - [ ] 6.3 实现归口包确认、编辑和审核 API
+    - 支持包名、对象、变更类型、适用范围、条目集合、推荐级别和触发条件编辑。
+    - 审核发布后参与需求分析匹配。
+    - 覆盖需求：`requirements.md` 第 9、11 节。
+  - [ ] 6.4 实现测试归口资产库前端页面
+    - 展示归口包列表、包内条目、必测/建议/条件触发关系、来源依据和版本记录。
+    - 覆盖需求：`requirements.md` 第 9 节。
+  - [ ]* 6.5 编写 RFID 供应商变更归口包测试
+    - 验证系统生成 RFID 供应商变更验证包，包含装配、初始化、读取、写入、安规 EMC 条目。
+    - 覆盖验收：`acceptance-test-plan.md` TC-SPLIT-003。
+
+- [ ] 7. 实现风险知识源解析和风险覆盖关系
+  - [ ] 7.1 实现风险项和风险测试关系数据模型
+    - 创建 `risk_items`、`risk_test_relations` 表和 CRUD Repository。
+    - 支持 Jira、DFMEA、风险管理表、测试报告问题统一风险项。
+    - 覆盖需求：`requirements.md` 第 10 节；`data-api.md` 第 7 节。
+  - [ ] 7.2 实现 Jira 导出表解析服务
+    - 解析 Jira 编号、标题、描述、产品型号、模块、严重程度、RPN、复现步骤、根因、解决方案和状态。
+    - 映射对象、子系统和风险字段。
+    - 覆盖需求：`requirements.md` 第 10 节；`ai-prompt-schema.md` 第 8 节。
+  - [ ] 7.3 实现 DFMEA 表格解析服务
+    - 解析 DFMEA 编号、功能、失效模式、失效后果、失效原因、控制措施、S/O/D/RPN/AP 和状态。
+    - 映射对象、子系统和测试层级。
+    - 覆盖需求：`requirements.md` 第 10 节；`ai-prompt-schema.md` 第 8 节。
+  - [ ] 7.4 实现风险项检索和风险补充建议基础服务
+    - 按对象、子系统、产品型号、变更类型检索风险项。
+    - 基于高 RPN/AP、Jira 历史问题生成风险补充测试建议候选。
+    - 覆盖需求：`requirements.md` 第 10、11 节。
+  - [ ] 7.5 实现风险知识源前端页面
+    - 支持风险项列表、详情、来源文档、风险字段、关联测试条目和覆盖关系查看。
+    - 覆盖需求：`requirements.md` 第 10 节。
+  - [ ]* 7.6 编写 Jira 和 DFMEA 解析测试
+    - 验证有效行生成风险项，关键字段准确提取并可用于推荐。
+    - 覆盖验收：`acceptance-test-plan.md` TC-RISK-001、TC-RISK-002、TC-RISK-003。
+
+- [ ] 8. 实现本地知识检索和 AI 编排基础设施
+  - [ ] 8.1 实现混合检索服务
+    - 按权限和项目资料规则过滤后执行全文检索、向量检索、结果合并和重排序。
+    - 支持文档切片、测试条目资产、测试归口包、风险项检索。
+    - 覆盖需求：`architecture.md` 第 8、12 节；`requirements.md` 第 4、11 节。
+  - [ ] 8.2 实现 AI Prompt 模板和任务运行记录
+    - 创建 Prompt 模板配置、版本管理、AI 调用记录和输出校验状态。
+    - 记录输入快照、输出 JSON、模型名称、Prompt 版本。
+    - 覆盖需求：`ai-prompt-schema.md` 第 12 节；`architecture.md` 第 14 节。
+  - [ ] 8.3 实现 JSON Schema 校验和修复流程
+    - 对 AI 输出执行 JSON 格式、枚举、必填、confidence、evidence 和引用权限校验。
+    - 首次失败调用模型修复 JSON，二次失败进入人工处理。
+    - 覆盖需求：`ai-prompt-schema.md` 第 1、12 节。
+  - [ ] 8.4 实现联网参考开关和脱敏管道
+    - 管理员可按项目开启联网外部参考。
+    - 联网前脱敏内部编号、供应商敏感信息、未公开参数，结果标记为外部参考。
+    - 覆盖需求：`requirements.md` 第 12 节；`architecture.md` 第 10 节。
+  - [ ]* 8.5 编写检索权限和 AI Schema 校验测试
+    - 验证检索不越权，AI 输出不符合 Schema 时被拦截。
+    - 覆盖验收：`acceptance-test-plan.md` 权限测试、联网大模型测试。
+
+- [ ] 9. 实现新需求和变更需求分析流程
+  - [ ] 9.1 实现需求分析和推荐数据模型
+    - 创建 `requirement_analyses`、`requirement_recommendations` 表和 Repository。
+    - 保存输入需求、解析结果、推荐结果、条件问题和用户决策。
+    - 覆盖需求：`requirements.md` 第 11 节；`data-api.md` 第 8 节。
+  - [ ] 9.2 实现需求输入和需求解析服务
+    - 实现 `POST /api/requirement-analyses` 和 `parse` API。
+    - 识别变更对象、变更类型、影响产品型号、子系统、测试层级、风险点和缺失信息。
+    - 覆盖需求：`requirements.md` 第 11 节；`ai-prompt-schema.md` 第 9 节。
+  - [ ] 9.3 实现归口包匹配和测试条目召回
+    - 按对象、变更类型、产品型号、子系统匹配已发布归口包。
+    - 召回包内必测、建议、条件触发测试条目。
+    - 覆盖需求：`requirements.md` 第 9、11 节。
+  - [ ] 9.4 实现风险补充和本地依据检索
+    - 检索 Jira、DFMEA、测试规范、历史方案、测试报告和技术要求。
+    - 将风险项映射到已有条目，生成未覆盖风险的补充建议。
+    - 覆盖需求：`requirements.md` 第 10、11 节。
+  - [ ] 9.5 实现测试推荐生成和用户决策 API
+    - 输出必测、建议、条件触发、Jira 风险补充、DFMEA 风险补充、AI 补充分组。
+    - 支持用户采纳、修改、删除、补充、合并、拆分、调整级别和条件确认。
+    - 覆盖需求：`requirements.md` 第 11 节；`ai-prompt-schema.md` 第 10 节。
+  - [ ] 9.6 实现需求分析和推荐审核前端页面
+    - 展示需求解析结果、推荐理由、依据来源、风险覆盖和用户决策控件。
+    - 覆盖需求：`requirements.md` 第 11 节。
+  - [ ]* 9.7 编写 RFID 供应商变更推荐测试
+    - 验证输入 RFID 供应商变更需求后推荐装配、初始化、读取、写入、安规 EMC 测试。
+    - 覆盖验收：`acceptance-test-plan.md` TC-REQ-001、TC-REQ-002、TC-REQ-003、TC-REQ-004。
+
+- [ ] 10. 实现验证方案生成、编辑和 Word 导出
+  - [ ] 10.1 实现验证方案和方案条目数据模型
+    - 创建 `validation_plans`、`validation_plan_items`、`validation_plan_versions`、`export_records` 表。
+    - 保存方案结构化 JSON、条目快照、版本快照和导出文件记录。
+    - 覆盖需求：`requirements.md` 第 13、14 节；`data-api.md` 第 9 节。
+  - [ ] 10.2 实现从需求分析生成方案草稿服务
+    - 汇总用户审核后的测试条目、参考文档、DUT 候选信息和风险依据。
+    - 生成文档履历、概述、DUT、参考文档、测试项目列表和 `3.x` 章节结构。
+    - 覆盖需求：`requirements.md` 第 13、14 节。
+  - [ ] 10.3 实现验证方案在线编辑 API 和前端页面
+    - 支持编辑文档履历、概述、DUT、参考文档、测试项目列表、测试项目详情、测试记录、需求符合性和 BUG 信息。
+    - 支持测试项目排序和条目快照更新。
+    - 覆盖需求：`requirements.md` 第 14 节。
+  - [ ] 10.4 实现完整性校验服务
+    - 按阻断、警告、提示输出校验结果。
+    - 校验概述、DUT、参考文档、测试项目、步骤、记录表、依据来源、条件触发项决策。
+    - 覆盖需求：`requirements.md` 第 14 节；`ai-prompt-schema.md` 第 11 节。
+  - [ ] 10.5 实现 Word 模板渲染和导出
+    - 使用固定验证方案模板 V1 渲染文档履历、概述、DUT、参考文档、测试项目列表和循环 `3.x` 详情。
+    - 导出 `.docx` 到 MinIO，保存导出记录并提供下载 API。
+    - 覆盖需求：`requirements.md` 第 13、14 节；`architecture.md` 第 11 节。
+  - [ ]* 10.6 编写验证方案生成和导出测试
+    - 验证方案结构符合模板，文件可打开，DFMEA/Jira 信息可进入对应表格。
+    - 覆盖验收：`acceptance-test-plan.md` TC-PLAN-001、TC-PLAN-002、TC-PLAN-003、TC-PLAN-004。
+
+- [ ] 11. 检查点 - 确保核心闭环可运行
+  - 确保所有测试通过,如有疑问请询问用户。
+  - 用 RFID 示例手动跑通资料上传、标签确认、管理员审核、方案拆分、归口包生成、需求分析、条目审核、方案导出链路。
+
+- [ ] 12. 完善系统管理、模板配置和质量追踪
+  - [ ] 12.1 实现标签体系和枚举管理
+    - 管理子系统目录、文档类型、测试类型、变更类型、保密级别、资料状态。
+    - 覆盖需求：`requirements.md` 第 3、5、6 节。
+  - [ ] 12.2 实现验证方案模板管理基础能力
+    - 管理模板 V1 的模板文件、模板编码、启用状态和导出配置。
+    - 覆盖需求：`requirements.md` 第 13、14 节。
+  - [ ] 12.3 实现 AI 配置和联网开关管理
+    - 管理模型配置引用、联网开关、脱敏规则和外部参考显示策略。
+    - 覆盖需求：`requirements.md` 第 12 节；`architecture.md` 第 10 节。
+  - [ ] 12.4 实现操作日志和审计追踪
+    - 记录资料审核、条目审核、归口包发布、需求推荐决策、方案导出操作。
+    - 覆盖需求：`requirements.md` 第 14、15 节。
+  - [ ]* 12.5 编写系统管理和审计测试
+    - 验证配置变更、审核动作和导出记录可追溯。
+    - 覆盖验收：`acceptance-test-plan.md` 核心评估指标和上线条件。
+
+- [ ] 13. 检查点 - 确保 MVP 验收指标可评估
+  - 确保所有测试通过,如有疑问请询问用户。
+  - 基于 `acceptance-test-plan.md` 输出端到端主用例执行结果、AI 结果专家评分入口和核心指标统计入口。
