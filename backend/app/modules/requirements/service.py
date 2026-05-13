@@ -18,8 +18,8 @@ from app.modules.test_packages.service import list_packages
 
 ANALYSES: dict[str, RequirementAnalysisRead] = {}
 
-REQUIRED_REQUIREMENT_FIELDS = ["需求标题", "产品型号", "变更对象", "所属子系统", "变更类型", "变更背景", "变更内容"]
-OPTIONAL_REQUIREMENT_FIELDS = ["影响范围", "验收标准", "已知风险"]
+REQUIRED_REQUIREMENT_FIELDS = ["需求标题", "产品型号", "变更对象", "变更背景", "变更内容"]
+OPTIONAL_REQUIREMENT_FIELDS = ["所属子系统", "变更类型", "影响范围", "验收标准", "已知风险"]
 STANDARD_REQUIREMENT_SECTIONS = {
     "需求标题",
     "产品型号",
@@ -75,8 +75,8 @@ def get_requirement_template_fields() -> list[dict[str, str | bool]]:
         "需求标题": "用于区分每条需求的短标题",
         "产品型号": "适用产品型号，例如 DNBSEQ-G99",
         "变更对象": "本次变更涉及的对象，例如 RFID",
-        "所属子系统": "对象所属子系统，例如 RFID",
-        "变更类型": "供应商变更、设计变更、工艺变更等",
+        "所属子系统": "可选，对象所属子系统，例如 RFID；系统可根据变更对象推断",
+        "变更类型": "可选，供应商变更、设计变更、工艺变更等；系统可根据背景和内容推断",
         "变更背景": "说明为什么需要这次变更",
         "变更内容": "说明具体变化点",
         "影响范围": "可选，说明可能影响的测试范围",

@@ -17,8 +17,6 @@ import { useProjects } from "../context/ProjectContext";
 const STANDARD_REQUIREMENT_TEMPLATE = `需求标题：DNBSEQ-G99 RFID 二供供应商导入验证
 产品型号：DNBSEQ-G99
 变更对象：RFID
-所属子系统：RFID
-变更类型：供应商变更
 变更背景：现有 RFID 物料需引入二供供应商以降低供应风险
 变更内容：同步引入康奈特 RFID，保持功能规格和接口定义一致`;
 
@@ -90,7 +88,7 @@ export default function RequirementAnalysisPage() {
       </Typography.Paragraph>
       <Card title="标准需求格式" className="section-card">
         <Typography.Paragraph type="secondary">
-          必填字段为需求标题、产品型号、变更对象、所属子系统、变更类型、变更背景和变更内容。影响范围、验收标准和已知风险为可选字段。
+          必填字段为需求标题、产品型号、变更对象、变更背景和变更内容。所属子系统、变更类型、影响范围、验收标准和已知风险为可选字段，可由系统推断或用户补充确认。
         </Typography.Paragraph>
         {template && (
           <Space wrap className="section-card">

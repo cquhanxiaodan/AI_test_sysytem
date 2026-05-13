@@ -72,7 +72,7 @@ def test_upload_requirement_document_extracts_standard_description() -> None:
         files={
             "file": (
                 "rfid-requirement.txt",
-                "需求标题：RFID 二供导入\n产品型号：DNBSEQ-G99\n变更对象：RFID\n变更类型：供应商变更\n".encode("utf-8"),
+                "需求标题：RFID 二供导入\n产品型号：DNBSEQ-G99\n变更对象：RFID\n变更背景：降低供应风险\n变更内容：引入二供供应商\n".encode("utf-8"),
                 "text/plain",
             )
         },
@@ -93,7 +93,7 @@ def test_requirement_analysis_accepts_standard_format() -> None:
         headers=headers,
         json={
             "project_id": "project-g99-rfid",
-            "description": "需求标题：RFID 二供导入\n产品型号：DNBSEQ-G99\n变更对象：RFID\n所属子系统：RFID\n变更类型：供应商变更\n变更内容：导入二供供应商",
+            "description": "需求标题：RFID 二供导入\n产品型号：DNBSEQ-G99\n变更对象：RFID\n变更背景：降低供应风险，引入二供供应商\n变更内容：导入二供供应商",
         },
     )
 
@@ -110,16 +110,16 @@ def test_requirement_template_download_available() -> None:
 
     assert response.status_code == 200
     content = response.content.decode("utf-8-sig")
-    assert "需求标题,产品型号,变更对象,所属子系统,变更类型,变更背景,变更内容" in content
+    assert "需求标题,产品型号,变更对象,变更背景,变更内容,所属子系统,变更类型" in content
 
 
 def test_upload_requirement_table_batch_analyzes_valid_rows() -> None:
     headers = auth_headers()
     seed_assets(headers)
     content = (
-        "需求标题,产品型号,变更对象,所属子系统,变更类型,变更背景,变更内容,影响范围,验收标准,已知风险\n"
-        "RFID 二供导入,DNBSEQ-G99,RFID,RFID,供应商变更,降低供应风险,同步引入康奈特 RFID,,,\n"
-        "缺字段需求,DNBSEQ-G99,RFID,RFID,供应商变更,降低供应风险,,,,\n"
+        "需求标题,产品型号,变更对象,变更背景,变更内容,所属子系统,变更类型,影响范围,验收标准,已知风险\n"
+        "RFID 二供导入,DNBSEQ-G99,RFID,降低供应风险,同步引入康奈特 RFID,RFID,供应商变更,,,\n"
+        "缺字段需求,DNBSEQ-G99,RFID,降低供应风险,,RFID,供应商变更,,,\n"
     )
 
     response = client.post(
