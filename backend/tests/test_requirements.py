@@ -135,3 +135,39 @@ def test_upload_requirement_table_batch_analyzes_valid_rows() -> None:
     assert result["items"][0]["analysis"] is not None
     assert result["items"][1]["analysis"] is None
     assert "变更内容" in result["items"][1]["missing_fields"]
+
+
+def test_requirement_recommendations_merge_ai_with_local_sources(monkeypatch) -> None:
+    headers = auth_headers()
+    seed_assets(headers)
+
+    def fake_run_json_task(task_type, *args, **kwargs):
+        if task_type == "requirement_recommendation":
+            package_id = next(iter(TEST_PACKAGES.values())).id
+            return {
+                "required": [
+                    {
+                        "title": "AI 补充 RFID 供应商变更回归测试",
+                        "source_type": "test_package",
+                        "source_id": package_id,
+                        "reason": "匹配本地 RFID 归口包",
+                        "evidence": "本地归口包命中",
+                    }
+                ],
+                "suggested": [],
+                "conditional": [],
+                "evidence": "本地归口包命中",
+            }
+        return None
+
+    monkeypatch.setattr("app.modules.requirements.service.run_json_task", fake_run_json_task)
+
+    response = client.post(
+        "/api/requirement-analyses",
+        headers=headers,
+        json={"project_id": "project-g99-rfid", "description": "DNBSEQ-G99 引入二供供应商康奈特 RFID"},
+    )
+
+    assert response.status_code == 200
+    titles = {item["title"] for item in response.json()["recommendations"]}
+    assert "AI 补充 RFID 供应商变更回归测试" in titles

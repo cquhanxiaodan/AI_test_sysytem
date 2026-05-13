@@ -6,8 +6,11 @@ import { useAuth } from "./context/AuthContext";
 
 const DashboardPage = lazy(() => import("./pages/DashboardPage"));
 const DocumentPoolPage = lazy(() => import("./pages/DocumentPoolPage"));
+const FreeChatPage = lazy(() => import("./pages/FreeChatPage"));
 const LoginPage = lazy(() => import("./pages/LoginPage"));
+const ProjectSpacesPage = lazy(() => import("./pages/ProjectSpacesPage"));
 const RequirementAnalysisPage = lazy(() => import("./pages/RequirementAnalysisPage"));
+const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 const TestAssetsPage = lazy(() => import("./pages/TestAssetsPage"));
 const ValidationPlansPage = lazy(() => import("./pages/ValidationPlansPage"));
 
@@ -28,10 +31,13 @@ export default function App() {
         <Route path="/login" element={user ? <Navigate to="/" replace /> : <LoginPage />} />
         <Route path="/" element={user ? <AppShell /> : <Navigate to="/login" replace />}>
           <Route index element={<DashboardPage />} />
+          <Route path="projects" element={<ProjectSpacesPage />} />
           <Route path="documents" element={<DocumentPoolPage />} />
           <Route path="requirements" element={<RequirementAnalysisPage />} />
           <Route path="test-assets" element={<TestAssetsPage />} />
           <Route path="validation-plans" element={<ValidationPlansPage />} />
+          <Route path="free-chat" element={<FreeChatPage />} />
+          <Route path="settings" element={<SettingsPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

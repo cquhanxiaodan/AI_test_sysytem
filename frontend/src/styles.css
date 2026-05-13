@@ -69,6 +69,12 @@ body {
   margin-bottom: 16px;
 }
 
+.responsive-space {
+  display: flex;
+  flex-wrap: wrap;
+  width: 100%;
+}
+
 .app-content {
   padding: 24px;
 }

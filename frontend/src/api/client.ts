@@ -16,6 +16,23 @@ export type Project = {
   document_rules: Array<{ label_key: string; label_value: string }>;
 };
 
+export type ProjectCreatePayload = {
+  code: string;
+  name: string;
+  description?: string;
+};
+
+export type ProjectWorkspaceStats = {
+  project_id: string;
+  published_documents: number;
+  test_items: number;
+  risk_items: number;
+  validation_plans: number;
+  test_packages: number;
+  ai_configured: boolean;
+  next_steps: string[];
+};
+
 export type DocumentItem = {
   id: string;
   project_id: string;
@@ -169,9 +186,27 @@ export type SystemConfig = {
 
 export type AiConfig = {
   provider: string;
+  base_url: string;
   model: string;
+  timeout_seconds: number;
   configured: boolean;
   external_reference_enabled: boolean;
+  api_key_configured: boolean;
+  api_key_masked: string | null;
+};
+
+export type AiConfigUpdate = {
+  provider: string;
+  base_url: string;
+  api_key: string;
+  model: string;
+  timeout_seconds: number;
+};
+
+export type FreeChatResponse = {
+  answer: string;
+  used_model: boolean;
+  sources: Array<{ source_type: string; source_id: string; title: string; text: string; score: number }>;
 };
 
 export function getToken() {
@@ -217,6 +252,33 @@ export async function fetchMe() {
 
 export async function fetchProjects() {
   return request<Project[]>("/api/projects");
+}
+
+export async function createProject(payload: ProjectCreatePayload) {
+  return request<Project>("/api/projects", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteProject(projectId: string, password: string) {
+  const token = getToken();
+  const response = await fetch(`/api/projects/${projectId}`, {
+    method: "DELETE",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ password }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await response.text());
+  }
+}
+
+export async function fetchProjectWorkspaceStats(projectId: string) {
+  return request<ProjectWorkspaceStats>(`/api/projects/${projectId}/workspace-stats`);
 }
 
 export async function fetchDocuments(projectId?: string) {
@@ -378,4 +440,23 @@ export async function fetchSystemConfig() {
 
 export async function fetchAiConfig() {
   return request<AiConfig>("/api/ai/config");
+}
+
+export async function updateAiConfig(config: AiConfigUpdate) {
+  return request<AiConfig>("/api/ai/config", {
+    method: "PUT",
+    body: JSON.stringify(config),
+  });
+}
+
+export async function askFreeChat(projectId: string, question: string, useProjectKnowledge: boolean, useExternalModel: boolean) {
+  return request<FreeChatResponse>("/api/free-chat/ask", {
+    method: "POST",
+    body: JSON.stringify({
+      project_id: projectId,
+      question,
+      use_project_knowledge: useProjectKnowledge,
+      use_external_model: useExternalModel,
+    }),
+  });
 }

@@ -6,6 +6,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.config import get_settings
 from app.core.database import Base, session_scope
+from app.modules.ai.service import run_json_task
 from app.modules.documents.repository import get_document
 from app.modules.parsing.service import list_chunks
 from app.modules.test_items.schemas import SplitResult, TestItemAsset
@@ -60,9 +61,57 @@ def split_document_to_items(document_id: str) -> SplitResult | None:
     text = "\n".join(chunk.text for chunk in chunks) or document.filename
     titles = infer_test_titles(text)
     items = [build_test_item(document.project_id, document_id, title, text) for title in titles]
+    items = split_items_with_ai(document.project_id, document_id, document.filename, text, items) or items
     for item in items:
         _save_item(item)
     return SplitResult(document_id=document_id, items=items)
+
+
+def split_items_with_ai(project_id: str, document_id: str, filename: str, text: str, fallback_items: list[TestItemAsset]) -> list[TestItemAsset] | None:
+    output = run_json_task(
+        "test_item_split",
+        "你是基因测序仪验证方案拆分助手。只输出 JSON，不输出解释。",
+        (
+            "从验证方案、测试规范或测试报告中拆分测试条目，输出 items 数组。"
+            "每个条目包含 title、test_object、primary_subsystem、related_subsystems、test_level、test_type、risk_tags、objective、method、tools、steps、record_template、evidence。"
+            "优先按 3.x 测试项目拆分，保留本地证据，缺失字段使用待确认。"
+            f"\n文件名：{filename}"
+            f"\n本地候选：{[item.title for item in fallback_items]}"
+            f"\n资料内容：\n{text[:8000]}"
+        ),
+    )
+    if output is None or not isinstance(output.get("items"), list):
+        return None
+    items: list[TestItemAsset] = []
+    for raw_item in output["items"]:
+        if not isinstance(raw_item, dict) or not raw_item.get("title"):
+            continue
+        try:
+            items.append(
+                TestItemAsset(
+                    id=f"item-{uuid4()}",
+                    project_id=project_id,
+                    source_document_id=document_id,
+                    title=str(raw_item.get("title") or "资料来源测试条目"),
+                    test_object=str(raw_item.get("test_object") or "待确认对象"),
+                    primary_subsystem=str(raw_item.get("primary_subsystem") or raw_item.get("subsystem") or "待确认子系统"),
+                    related_subsystems=[str(value) for value in raw_item.get("related_subsystems", []) if isinstance(value, str)],
+                    test_level=str(raw_item.get("test_level") or "待确认层级"),
+                    test_type=str(raw_item.get("test_type") or "功能测试"),
+                    risk_tags=[str(value) for value in raw_item.get("risk_tags", []) if isinstance(value, str)],
+                    objective=str(raw_item.get("objective") or f"验证{raw_item.get('title')}满足需求。"),
+                    method=str(raw_item.get("method") or "待测试工程师确认方法和标准。"),
+                    tools=[str(value) for value in raw_item.get("tools", []) if isinstance(value, str)],
+                    steps=[str(value) for value in raw_item.get("steps", []) if isinstance(value, str)],
+                    record_template=str(raw_item.get("record_template") or "记录测试条件、实际结果、判定结论和关联 BUG。"),
+                    evidence=str(raw_item.get("evidence") or output.get("evidence") or text[:500])[:1000],
+                    status="draft",
+                    created_at=datetime.now(UTC),
+                )
+            )
+        except (TypeError, ValueError):
+            continue
+    return items or None
 
 
 def confirm_item(item_id: str) -> TestItemAsset | None:

@@ -1,6 +1,7 @@
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.modules.ai.service import RUNTIME_AI_CONFIG
 from app.modules.risks.service import RISKS
 from app.modules.test_items.service import TEST_ITEMS
 from app.modules.test_packages.service import TEST_PACKAGES
@@ -10,6 +11,7 @@ client = TestClient(app)
 
 
 def setup_function() -> None:
+    RUNTIME_AI_CONFIG.clear()
     RISKS.clear()
     TEST_ITEMS.clear()
     TEST_PACKAGES.clear()
@@ -68,3 +70,66 @@ def test_ai_config_reports_local_fallback_by_default() -> None:
     config = response.json()
     assert config["provider"] == "local"
     assert config["configured"] is False
+    assert config["api_key_configured"] is False
+
+
+def test_admin_can_update_ai_config() -> None:
+    response = client.put(
+        "/api/ai/config",
+        headers=auth_headers(),
+        json={
+            "provider": "openai-compatible",
+            "base_url": "https://model.example.com/v1",
+            "api_key": "sk-test-secret",
+            "model": "test-model",
+            "timeout_seconds": 30,
+        },
+    )
+
+    assert response.status_code == 200
+    config = response.json()
+    assert config["configured"] is True
+    assert config["base_url"] == "https://model.example.com/v1"
+    assert config["model"] == "test-model"
+    assert config["timeout_seconds"] == 30
+    assert config["api_key_configured"] is True
+    assert config["api_key_masked"] == "sk-t****cret"
+
+
+def test_non_admin_can_update_ai_config() -> None:
+    response = client.put(
+        "/api/ai/config",
+        headers=auth_headers("tester", "tester123"),
+        json={
+            "provider": "openai-compatible",
+            "base_url": "https://tester-model.example.com/v1",
+            "api_key": "tester-secret",
+            "model": "tester-model",
+            "timeout_seconds": 20,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["configured"] is True
+    assert response.json()["model"] == "tester-model"
+
+
+def test_free_chat_returns_local_knowledge_answer() -> None:
+    headers = auth_headers()
+    client.post(
+        "/api/risks/parse",
+        headers=headers,
+        json={"project_id": "project-g99-rfid", "source_type": "jira", "content": "title\nRFID读取失败\n"},
+    )
+
+    response = client.post(
+        "/api/free-chat/ask",
+        headers=headers,
+        json={"project_id": "project-g99-rfid", "question": "RFID 读取有什么风险", "use_project_knowledge": True, "use_external_model": False},
+    )
+
+    assert response.status_code == 200
+    result = response.json()
+    assert result["used_model"] is False
+    assert result["sources"]
+    assert "RFID" in result["answer"]

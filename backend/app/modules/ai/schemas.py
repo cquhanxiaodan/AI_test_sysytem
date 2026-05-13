@@ -16,9 +16,21 @@ class AiValidationResponse(BaseModel):
 
 class AiConfigRead(BaseModel):
     provider: str
+    base_url: str
     model: str
+    timeout_seconds: int
     configured: bool
     external_reference_enabled: bool
+    api_key_configured: bool
+    api_key_masked: str | None
+
+
+class AiConfigUpdate(BaseModel):
+    provider: str
+    base_url: str = ""
+    api_key: str = ""
+    model: str = ""
+    timeout_seconds: int = 20
 
 
 class AiRunRecord(BaseModel):

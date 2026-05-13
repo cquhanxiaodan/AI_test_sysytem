@@ -8,6 +8,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.config import get_settings
 from app.core.database import Base, session_scope
+from app.modules.ai.service import run_json_task
 from app.modules.risks.schemas import RiskItem
 
 RISKS: dict[str, RiskItem] = {}
@@ -74,9 +75,58 @@ def parse_risks(project_id: str, source_type: str, content: str) -> list[RiskIte
         rows = [{"title": line.strip()} for line in content.splitlines() if line.strip()]
     parser = build_jira_risk if source_type.lower() == "jira" else build_dfmea_risk
     items = [parser(project_id, row) for row in rows]
+    items = parse_risks_with_ai(project_id, source_type, content, items) or items
     for item in items:
         _save_risk(item)
     return items
+
+
+def parse_risks_with_ai(project_id: str, source_type: str, content: str, fallback_items: list[RiskItem]) -> list[RiskItem] | None:
+    output = run_json_task(
+        "risk_parse",
+        "你是基因测序仪风险知识解析助手。只输出 JSON，不输出解释。",
+        (
+            "从 Jira 导出或 DFMEA 内容中解析风险项，输出 items 数组。"
+            "每项包含 source_id、title、description、product_model、test_object、subsystem、severity、rpn、failure_mode、failure_effect、root_cause、control_measure、suggested_test、status。"
+            "优先保留原始编号和本地证据，无法确认的字段使用 null 或待确认。"
+            f"\n来源类型：{source_type}"
+            f"\n本地候选：{[item.model_dump() for item in fallback_items[:5]]}"
+            f"\n原始内容：\n{content[:8000]}"
+        ),
+    )
+    if output is None or not isinstance(output.get("items"), list):
+        return None
+    items: list[RiskItem] = []
+    normalized_source_type = "jira" if source_type.lower() == "jira" else "dfmea"
+    for raw_item in output["items"]:
+        if not isinstance(raw_item, dict) or not raw_item.get("title"):
+            continue
+        try:
+            items.append(
+                RiskItem(
+                    id=f"risk-{uuid4()}",
+                    project_id=project_id,
+                    source_type=normalized_source_type,
+                    source_id=str(raw_item.get("source_id") or f"{normalized_source_type}-unknown"),
+                    title=str(raw_item.get("title") or "风险项"),
+                    description=str(raw_item.get("description") or raw_item.get("title") or "风险项"),
+                    product_model=raw_item.get("product_model") if raw_item.get("product_model") else None,
+                    test_object=str(raw_item.get("test_object") or "待确认对象"),
+                    subsystem=str(raw_item.get("subsystem") or "待确认子系统"),
+                    severity=str(raw_item.get("severity")) if raw_item.get("severity") is not None else None,
+                    rpn=parse_int(str(raw_item.get("rpn"))) if raw_item.get("rpn") is not None else None,
+                    failure_mode=str(raw_item.get("failure_mode")) if raw_item.get("failure_mode") else None,
+                    failure_effect=str(raw_item.get("failure_effect")) if raw_item.get("failure_effect") else None,
+                    root_cause=str(raw_item.get("root_cause")) if raw_item.get("root_cause") else None,
+                    control_measure=str(raw_item.get("control_measure")) if raw_item.get("control_measure") else None,
+                    suggested_test=str(raw_item.get("suggested_test") or "根据风险项补充对应子系统功能、性能或回归测试。"),
+                    status=str(raw_item.get("status") or "active"),
+                    created_at=datetime.now(UTC),
+                )
+            )
+        except (TypeError, ValueError):
+            continue
+    return items or None
 
 
 def build_jira_risk(project_id: str, row: dict[str, str]) -> RiskItem:

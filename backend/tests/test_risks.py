@@ -65,3 +65,37 @@ def test_list_risks_filters_by_project() -> None:
 
     assert response.status_code == 200
     assert len(response.json()) == 1
+
+
+def test_parse_risks_uses_ai_items(monkeypatch) -> None:
+    def fake_run_json_task(*args, **kwargs):
+        return {
+            "items": [
+                {
+                    "source_id": "AI-1",
+                    "title": "RFID 初始化异常",
+                    "description": "供应商变更后初始化偶发失败",
+                    "test_object": "RFID",
+                    "subsystem": "RFID",
+                    "severity": "High",
+                    "rpn": 96,
+                    "failure_mode": "初始化失败",
+                    "suggested_test": "补充 RFID 初始化异常恢复测试。",
+                    "status": "active",
+                }
+            ],
+            "evidence": "初始化偶发失败",
+        }
+
+    monkeypatch.setattr("app.modules.risks.service.run_json_task", fake_run_json_task)
+
+    response = client.post(
+        "/api/risks/parse",
+        headers=auth_headers(),
+        json={"project_id": "project-g99-rfid", "source_type": "jira", "content": "title\nRFID 初始化异常\n"},
+    )
+
+    assert response.status_code == 200
+    item = response.json()["items"][0]
+    assert item["source_id"] == "AI-1"
+    assert item["rpn"] == 96

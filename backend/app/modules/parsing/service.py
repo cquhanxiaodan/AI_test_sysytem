@@ -6,6 +6,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.config import get_settings
 from app.core.database import Base, session_scope
+from app.modules.ai.service import run_json_task
 from app.modules.documents.repository import get_document, get_document_content, update_labels
 from app.modules.parsing.schemas import DocumentChunk, ParsingTaskRead
 
@@ -68,6 +69,8 @@ def run_label_extraction_task(document_id: str) -> ParsingTaskRead | None:
     for suggestion in document.label_suggestions:
         if suggestion.confidence >= 0.85:
             labels.setdefault(suggestion.label_key, suggestion.label_value)
+    ai_labels = extract_labels_with_ai(document_id, labels)
+    labels.update(ai_labels)
     update_labels(document_id, labels)
     task = ParsingTaskRead(
         id=f"task-{uuid4()}",
@@ -81,6 +84,31 @@ def run_label_extraction_task(document_id: str) -> ParsingTaskRead | None:
     )
     _save_task(task)
     return task
+
+
+def extract_labels_with_ai(document_id: str, local_labels: dict[str, str]) -> dict[str, str]:
+    document = get_document(document_id)
+    if document is None:
+        return {}
+    chunks = list_chunks(document_id)
+    context = "\n".join(chunk.text for chunk in chunks[:8]) or document.filename
+    output = run_json_task(
+        "document_label_extraction",
+        "你是基因测序仪测试资料治理助手。只输出 JSON，不输出解释。",
+        (
+            "基于本地资料信息补全 labels。labels 必须是对象，键名优先使用 document_type、product_model、test_object、subsystem、change_type。"
+            "只在证据明确时补充字段，confidence 为 0 到 1，evidence 简述依据。"
+            f"\n文件名：{document.filename}"
+            f"\n本地标签：{local_labels}"
+            f"\n资料片段：\n{context[:4000]}"
+        ),
+    )
+    if output is None or not isinstance(output.get("labels"), dict):
+        return {}
+    confidence = output.get("confidence", 0)
+    if not isinstance(confidence, int | float) or confidence < 0.7:
+        return {}
+    return {str(key): str(value) for key, value in output["labels"].items() if key and value}
 
 
 def get_task(task_id: str) -> ParsingTaskRead | None:

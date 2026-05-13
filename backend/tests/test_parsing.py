@@ -53,3 +53,19 @@ def test_label_extraction_updates_high_confidence_labels() -> None:
     document = client.get(f"/api/documents/{document_id}", headers=headers).json()
     assert document["labels"]["product_model"] == "DNBSEQ-G99"
     assert document["labels"]["subsystem"] == "RFID"
+
+
+def test_label_extraction_merges_ai_labels(monkeypatch) -> None:
+    headers = auth_headers()
+    document_id = upload_demo(headers)
+
+    def fake_run_json_task(*args, **kwargs):
+        return {"labels": {"change_type": "供应商变更"}, "confidence": 0.91, "evidence": "文件内容提到 RFID 验证"}
+
+    monkeypatch.setattr("app.modules.parsing.service.run_json_task", fake_run_json_task)
+
+    response = client.post(f"/api/parsing/documents/{document_id}/extract-labels", headers=headers)
+
+    assert response.status_code == 200
+    document = client.get(f"/api/documents/{document_id}", headers=headers).json()
+    assert document["labels"]["change_type"] == "供应商变更"

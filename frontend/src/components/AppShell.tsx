@@ -1,10 +1,13 @@
 import {
   AppstoreOutlined,
   AuditOutlined,
+  ClusterOutlined,
+  CommentOutlined,
   ExperimentOutlined,
   FileSearchOutlined,
   FolderOpenOutlined,
   ProfileOutlined,
+  SettingOutlined,
 } from "@ant-design/icons";
 import { Layout, Menu, Typography } from "antd";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
@@ -15,10 +18,13 @@ const { Header, Sider, Content } = Layout;
 
 const menuItems = [
   { key: "/", icon: <AppstoreOutlined />, label: "项目工作台" },
+  { key: "/projects", icon: <ClusterOutlined />, label: "项目空间" },
   { key: "/documents", icon: <FolderOpenOutlined />, label: "统一资料池" },
   { key: "/test-assets", icon: <ExperimentOutlined />, label: "测试资产" },
   { key: "/requirements", icon: <FileSearchOutlined />, label: "需求分析" },
   { key: "/validation-plans", icon: <ProfileOutlined />, label: "验证方案" },
+  { key: "/free-chat", icon: <CommentOutlined />, label: "自由应用" },
+  { key: "/settings", icon: <SettingOutlined />, label: "系统设置" },
 ];
 
 export default function AppShell() {

@@ -9,6 +9,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.core.config import get_settings
 from app.core.database import Base, session_scope
 from app.modules.ai.service import run_json_task
+from app.modules.knowledge.service import search_project_knowledge
 from app.modules.requirements.schemas import (
     RequirementAnalysisRead,
     RequirementParseResult,
@@ -262,7 +263,61 @@ def build_recommendations(project_id: str, parse_result: RequirementParseResult)
             )
         )
 
-    return recommendations
+    return enrich_recommendations_with_ai(project_id, parse_result, recommendations) or recommendations
+
+
+def enrich_recommendations_with_ai(
+    project_id: str,
+    parse_result: RequirementParseResult,
+    local_recommendations: list[RequirementRecommendation],
+) -> list[RequirementRecommendation] | None:
+    query = " ".join(
+        value
+        for value in [parse_result.product_model, parse_result.test_object, parse_result.subsystem, parse_result.change_type]
+        if value
+    )
+    knowledge = search_project_knowledge(project_id, query)[:10]
+    output = run_json_task(
+        "requirement_recommendation",
+        "你是基因测序仪测试需求推荐助手。只输出 JSON，不输出解释。",
+        (
+            "基于本地测试资产、归口包、风险和文档片段补充推荐。输出 required、suggested、conditional 三个数组和 evidence。"
+            "每个推荐项包含 title、source_type、source_id、reason、evidence。source_id 必须来自本地候选或知识检索结果。"
+            "不得编造来源，无法找到本地来源时不要新增推荐。"
+            f"\n需求解析：{parse_result.model_dump()}"
+            f"\n本地推荐：{[item.model_dump() for item in local_recommendations]}"
+            f"\n知识命中：{[item.model_dump() for item in knowledge]}"
+        ),
+    )
+    if output is None:
+        return None
+    source_ids = {item.source_id for item in local_recommendations} | {item.source_id for item in knowledge}
+    enriched = list(local_recommendations)
+    seen = {(item.title, item.source_id) for item in enriched}
+    group_mapping = {"required": "必测", "suggested": "建议", "conditional": "条件触发"}
+    for raw_group, group in group_mapping.items():
+        raw_items = output.get(raw_group, [])
+        if not isinstance(raw_items, list):
+            continue
+        for raw_item in raw_items:
+            if not isinstance(raw_item, dict):
+                continue
+            source_id = str(raw_item.get("source_id") or "")
+            title = str(raw_item.get("title") or "")
+            if not source_id or source_id not in source_ids or not title or (title, source_id) in seen:
+                continue
+            enriched.append(
+                RequirementRecommendation(
+                    group=group,
+                    title=title,
+                    source_type=str(raw_item.get("source_type") or "knowledge"),
+                    source_id=source_id,
+                    reason=str(raw_item.get("reason") or "基于本地知识命中补充推荐"),
+                    evidence=str(raw_item.get("evidence") or output.get("evidence") or "本地知识命中"),
+                )
+            )
+            seen.add((title, source_id))
+    return enriched
 
 
 def _use_sqlalchemy() -> bool:

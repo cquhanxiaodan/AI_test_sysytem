@@ -55,3 +55,22 @@ def test_create_check_and_export_validation_plan() -> None:
     downloaded = client.get(export_record["download_url"], headers=headers)
     assert downloaded.status_code == 200
     assert downloaded.content.startswith(b"PK")
+
+
+def test_validation_plan_check_merges_ai_messages(monkeypatch) -> None:
+    headers = auth_headers()
+    analysis_id = create_analysis(headers)
+    created = client.post("/api/validation-plans", headers=headers, json={"requirement_analysis_id": analysis_id})
+    plan_id = created.json()["id"]
+
+    def fake_run_json_task(*args, **kwargs):
+        return {"blocking": [], "warnings": ["AI 提示需确认 RFID DUT 批次。"], "suggestions": ["AI 建议补充异常恢复记录。"]}
+
+    monkeypatch.setattr("app.modules.validation_plans.service.run_json_task", fake_run_json_task)
+
+    checked = client.post(f"/api/validation-plans/{plan_id}/check", headers=headers)
+
+    assert checked.status_code == 200
+    result = checked.json()
+    assert "AI 提示需确认 RFID DUT 批次。" in result["warnings"]
+    assert "AI 建议补充异常恢复记录。" in result["suggestions"]

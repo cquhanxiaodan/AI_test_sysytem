@@ -7,6 +7,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.config import get_settings
 from app.core.database import Base, session_scope
+from app.modules.ai.service import run_json_task
 from app.modules.requirements.service import get_analysis
 from app.modules.validation_plans.docx_exporter import render_validation_plan_docx
 from app.modules.validation_plans.schemas import (
@@ -118,7 +119,41 @@ def check_plan(plan_id: str) -> ValidationPlanCheckResult | None:
         warnings.append("DUT 信息存在待确认字段。")
     if len(plan.reference_documents) < 2:
         suggestions.append("建议补充参考文档。")
-    return ValidationPlanCheckResult(blocking=blocking, warnings=warnings, suggestions=suggestions)
+    local_result = ValidationPlanCheckResult(blocking=blocking, warnings=warnings, suggestions=suggestions)
+    return check_plan_with_ai(plan, local_result) or local_result
+
+
+def check_plan_with_ai(plan: ValidationPlanRead, local_result: ValidationPlanCheckResult) -> ValidationPlanCheckResult | None:
+    output = run_json_task(
+        "validation_plan_check",
+        "你是基因测序仪验证方案完整性检查助手。只输出 JSON，不输出解释。",
+        (
+            "基于验证方案 JSON 和本地检查结果补充 blocking、warnings、suggestions 三个数组。"
+            "blocking 仅用于会导致方案不可执行的问题，warnings 用于需人工确认的问题，suggestions 用于优化建议。"
+            f"\n本地检查：{local_result.model_dump()}"
+            f"\n验证方案：{plan.model_dump()}"
+        ),
+    )
+    if output is None:
+        return None
+    try:
+        return ValidationPlanCheckResult(
+            blocking=merge_messages(local_result.blocking, output.get("blocking", [])),
+            warnings=merge_messages(local_result.warnings, output.get("warnings", [])),
+            suggestions=merge_messages(local_result.suggestions, output.get("suggestions", [])),
+        )
+    except (TypeError, ValueError):
+        return None
+
+
+def merge_messages(local_messages: list[str], ai_messages: object) -> list[str]:
+    merged = list(local_messages)
+    if not isinstance(ai_messages, list):
+        return merged
+    for message in ai_messages:
+        if isinstance(message, str) and message and message not in merged:
+            merged.append(message)
+    return merged
 
 
 def export_plan(plan_id: str) -> ExportRecord | None:

@@ -9,9 +9,10 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.config import get_settings
 from app.core.database import Base, session_scope
-from app.modules.ai.schemas import AiConfigRead, AiRunRecord
+from app.modules.ai.schemas import AiConfigRead, AiConfigUpdate, AiRunRecord
 
 AI_RUNS: dict[str, AiRunRecord] = {}
+RUNTIME_AI_CONFIG: dict[str, Any] = {}
 
 
 class AiRunRecordModel(Base):
@@ -28,8 +29,12 @@ class AiRunRecordModel(Base):
 
 REQUIRED_FIELDS = {
     "document_label_extraction": ["labels", "confidence", "evidence"],
+    "requirement_parse": ["test_object", "change_type", "product_model", "subsystem", "missing_fields"],
     "requirement_recommendation": ["required", "suggested", "conditional", "evidence"],
+    "test_item_split": ["items", "evidence"],
+    "risk_parse": ["items", "evidence"],
     "validation_plan_check": ["blocking", "warnings", "suggestions"],
+    "free_chat": ["answer"],
 }
 
 
@@ -45,23 +50,67 @@ def validate_output(task_type: str, output: dict[str, Any]) -> tuple[bool, list[
 
 
 def get_ai_config() -> AiConfigRead:
-    settings = get_settings()
-    configured = settings.ai_provider == "openai-compatible" and bool(settings.ai_base_url and settings.ai_api_key and settings.ai_model)
+    provider, base_url, api_key, model, timeout_seconds = get_ai_runtime_values()
+    configured = provider == "openai-compatible" and bool(base_url and api_key and model)
     return AiConfigRead(
-        provider=settings.ai_provider,
-        model=settings.ai_model or "local-rule-engine",
+        provider=provider,
+        base_url=base_url,
+        model=model or "local-rule-engine",
+        timeout_seconds=timeout_seconds,
         configured=configured,
         external_reference_enabled=configured,
+        api_key_configured=bool(api_key),
+        api_key_masked=mask_secret(api_key),
     )
 
 
-def run_json_task(task_type: str, system_prompt: str, user_prompt: str) -> dict[str, Any] | None:
+def update_ai_config(payload: AiConfigUpdate) -> AiConfigRead:
+    provider = payload.provider if payload.provider in {"local", "openai-compatible"} else "local"
+    current_provider, current_base_url, current_api_key, current_model, current_timeout = get_ai_runtime_values()
+    timeout_seconds = payload.timeout_seconds if payload.timeout_seconds > 0 else current_timeout
+    RUNTIME_AI_CONFIG.update(
+        {
+            "provider": provider,
+            "base_url": payload.base_url.strip(),
+            "model": payload.model.strip(),
+            "timeout_seconds": timeout_seconds,
+        }
+    )
+    if payload.api_key.strip():
+        RUNTIME_AI_CONFIG["api_key"] = payload.api_key.strip()
+    elif "api_key" not in RUNTIME_AI_CONFIG and current_api_key:
+        RUNTIME_AI_CONFIG["api_key"] = current_api_key
+    if provider == "local":
+        RUNTIME_AI_CONFIG.update({"base_url": "", "model": "", "api_key": ""})
+    return get_ai_config()
+
+
+def get_ai_runtime_values() -> tuple[str, str, str, str, int]:
     settings = get_settings()
-    if settings.ai_provider != "openai-compatible" or not (settings.ai_base_url and settings.ai_api_key and settings.ai_model):
+    return (
+        str(RUNTIME_AI_CONFIG.get("provider", settings.ai_provider)),
+        str(RUNTIME_AI_CONFIG.get("base_url", settings.ai_base_url)),
+        str(RUNTIME_AI_CONFIG.get("api_key", settings.ai_api_key)),
+        str(RUNTIME_AI_CONFIG.get("model", settings.ai_model)),
+        int(RUNTIME_AI_CONFIG.get("timeout_seconds", settings.ai_timeout_seconds)),
+    )
+
+
+def mask_secret(secret: str) -> str | None:
+    if not secret:
         return None
-    url = f"{settings.ai_base_url.rstrip('/')}/chat/completions"
+    if len(secret) <= 8:
+        return "****"
+    return f"{secret[:4]}****{secret[-4:]}"
+
+
+def run_json_task(task_type: str, system_prompt: str, user_prompt: str) -> dict[str, Any] | None:
+    provider, base_url, api_key, model, timeout_seconds = get_ai_runtime_values()
+    if provider != "openai-compatible" or not (base_url and api_key and model):
+        return None
+    url = f"{base_url.rstrip('/')}/chat/completions"
     payload = {
-        "model": settings.ai_model,
+        "model": model,
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
@@ -72,11 +121,11 @@ def run_json_task(task_type: str, system_prompt: str, user_prompt: str) -> dict[
     req = request.Request(
         url,
         data=json.dumps(payload).encode("utf-8"),
-        headers={"Authorization": f"Bearer {settings.ai_api_key}", "Content-Type": "application/json"},
+        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
         method="POST",
     )
     try:
-        with request.urlopen(req, timeout=settings.ai_timeout_seconds) as response:
+        with request.urlopen(req, timeout=timeout_seconds) as response:
             data = json.loads(response.read().decode("utf-8"))
     except (TimeoutError, error.URLError, error.HTTPError, json.JSONDecodeError):
         return None
@@ -89,7 +138,7 @@ def run_json_task(task_type: str, system_prompt: str, user_prompt: str) -> dict[
     except json.JSONDecodeError:
         return None
     if isinstance(output, dict):
-        record_ai_run(task_type, output, model_name=settings.ai_model)
+        record_ai_run(task_type, output, model_name=model)
         return output
     return None
 
@@ -99,7 +148,7 @@ def record_ai_run(task_type: str, output: dict[str, Any], model_name: str | None
     record = AiRunRecord(
         id=f"ai-run-{uuid4()}",
         task_type=task_type,
-        model_name=model_name or get_settings().ai_model or "local-mock",
+        model_name=model_name or get_ai_runtime_values()[3] or "local-mock",
         prompt_version="v1",
         output=output,
         valid=valid,
