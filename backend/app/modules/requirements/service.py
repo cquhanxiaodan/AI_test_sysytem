@@ -3,7 +3,7 @@ import csv
 import io
 from uuid import uuid4
 
-from sqlalchemy import DateTime, JSON, String, Text
+from sqlalchemy import DateTime, JSON, String, Text, select
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.config import get_settings
@@ -167,6 +167,15 @@ def get_analysis(analysis_id: str) -> RequirementAnalysisRead | None:
             record = session.get(RequirementAnalysisRecord, analysis_id)
             return _record_to_analysis(record) if record is not None else None
     return ANALYSES.get(analysis_id)
+
+
+def list_analyses(project_id: str) -> list[RequirementAnalysisRead]:
+    if _use_sqlalchemy():
+        with session_scope() as session:
+            statement = select(RequirementAnalysisRecord).where(RequirementAnalysisRecord.project_id == project_id)
+            records = session.scalars(statement).all()
+            return [_record_to_analysis(record) for record in records]
+    return [analysis for analysis in ANALYSES.values() if analysis.project_id == project_id]
 
 
 def parse_requirement(description: str) -> RequirementParseResult:

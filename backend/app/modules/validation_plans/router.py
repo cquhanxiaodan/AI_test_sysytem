@@ -26,9 +26,16 @@ def plans(project_id: str | None = None, current_user: SeedUser = Depends(get_cu
 
 @router.post("", response_model=ValidationPlanRead)
 def create(payload: ValidationPlanCreateRequest, current_user: SeedUser = Depends(get_current_user)) -> ValidationPlanRead:
-    plan = create_plan(payload.requirement_analysis_id)
+    if payload.project_id is not None:
+        if get_project_for_user(payload.project_id, current_user) is None:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Project access denied")
+        plan = create_plan(project_id=payload.project_id)
+    elif payload.requirement_analysis_id is not None:
+        plan = create_plan(requirement_analysis_id=payload.requirement_analysis_id)
+    else:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="请提供 project_id 或 requirement_analysis_id")
     if plan is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Requirement analysis not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No analysis data found")
     if get_project_for_user(plan.project_id, current_user) is None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Project access denied")
     return plan

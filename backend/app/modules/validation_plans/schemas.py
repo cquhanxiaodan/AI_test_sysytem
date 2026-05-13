@@ -16,7 +16,7 @@ class ValidationPlanItem(BaseModel):
 class ValidationPlanRead(BaseModel):
     id: str
     project_id: str
-    requirement_analysis_id: str
+    requirement_analysis_ids: list[str]
     title: str
     template_version: str
     overview: str
@@ -28,7 +28,8 @@ class ValidationPlanRead(BaseModel):
 
 
 class ValidationPlanCreateRequest(BaseModel):
-    requirement_analysis_id: str
+    requirement_analysis_id: str | None = None
+    project_id: str | None = None
 
 
 class ValidationPlanCheckResult(BaseModel):

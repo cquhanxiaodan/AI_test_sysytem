@@ -1,4 +1,4 @@
-import { Button, Card, Form, Input, List, message, Modal, Space, Table, Tag, Typography } from "antd";
+import { Button, Card, Empty, List, message, Modal, Space, Table, Tag, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useState } from "react";
 import { checkValidationPlan, createValidationPlan, exportValidationPlan, fetchValidationPlans, ValidationPlan } from "../api/client";
@@ -8,8 +8,8 @@ export default function ValidationPlansPage() {
   const { currentProject } = useProjects();
   const [plans, setPlans] = useState<ValidationPlan[]>([]);
   const [loading, setLoading] = useState(false);
+  const [creating, setCreating] = useState(false);
   const [activePlan, setActivePlan] = useState<ValidationPlan | null>(null);
-  const [form] = Form.useForm<{ analysisId: string }>();
 
   async function loadPlans() {
     if (!currentProject) return;
@@ -25,10 +25,18 @@ export default function ValidationPlansPage() {
     loadPlans();
   }, [currentProject?.id]);
 
-  async function createPlan(values: { analysisId: string }) {
-    await createValidationPlan(values.analysisId);
-    message.success("验证方案草稿已生成");
-    await loadPlans();
+  async function handleCreate() {
+    if (!currentProject) return;
+    setCreating(true);
+    try {
+      await createValidationPlan(currentProject.id);
+      message.success("验证方案草稿已生成");
+      await loadPlans();
+    } catch (error: unknown) {
+      message.error(`生成失败：${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setCreating(false);
+    }
   }
 
   async function checkPlan(plan: ValidationPlan) {
@@ -43,9 +51,9 @@ export default function ValidationPlansPage() {
 
   const columns: ColumnsType<ValidationPlan> = [
     { title: "方案标题", dataIndex: "title" },
-    { title: "模板", dataIndex: "template_version" },
+    { title: "关联需求", dataIndex: "requirement_analysis_ids", render: (ids: string[]) => `${ids.length} 条` },
     { title: "测试项目", dataIndex: "items", render: (items: ValidationPlan["items"]) => items.length },
-    { title: "状态", dataIndex: "status", render: (status) => <Tag color="blue">{status}</Tag> },
+    { title: "状态", dataIndex: "status", render: (status: string) => <Tag color="blue">{status}</Tag> },
     {
       title: "操作",
       render: (_, plan) => (
@@ -60,34 +68,37 @@ export default function ValidationPlansPage() {
 
   return (
     <section>
-      <Space className="page-title" align="start">
-        <div>
-          <Typography.Title level={2}>验证方案</Typography.Title>
-          <Typography.Paragraph type="secondary">
-            基于审核后的测试条目生成验证方案草稿，完成完整性校验后导出 Word。
-          </Typography.Paragraph>
-        </div>
-      </Space>
+      <Typography.Title level={2}>验证方案</Typography.Title>
+      <Typography.Paragraph type="secondary">
+        基于当前项目所有已分析需求批量生成整体验证方案，完成完整性校验后导出 Word。
+      </Typography.Paragraph>
       <Card>
-        <Form form={form} layout="inline" onFinish={createPlan} className="form-row">
-          <Form.Item name="analysisId" rules={[{ required: true, message: "请输入需求分析 ID" }]}>
-            <Input placeholder="输入需求分析 ID 生成方案" className="wide-input" />
-          </Form.Item>
-          <Button type="primary" htmlType="submit">生成方案草稿</Button>
-        </Form>
-        <Table rowKey="id" loading={loading} columns={columns} dataSource={plans} pagination={false} />
+        <Space style={{ marginBottom: 16 }}>
+          <Button type="primary" loading={creating} disabled={!currentProject} onClick={handleCreate}>
+            为当前项目生成验证方案
+          </Button>
+        </Space>
+        {plans.length === 0 && !loading ? (
+          <Empty description="暂无验证方案。完成需求分析后点击上方按钮批量生成。" />
+        ) : (
+          <Table rowKey="id" loading={loading} columns={columns} dataSource={plans} pagination={false} />
+        )}
       </Card>
       <Modal title="验证方案详情" open={Boolean(activePlan)} onCancel={() => setActivePlan(null)} footer={null} width={860}>
         {activePlan && (
-          <List
-            header={activePlan.overview}
-            dataSource={activePlan.items}
-            renderItem={(item) => (
-              <List.Item>
-                <List.Item.Meta title={`${item.sequence}. ${item.title}`} description={`${item.objective}；依据：${item.evidence}`} />
-              </List.Item>
-            )}
-          />
+          <>
+            <Typography.Paragraph>{activePlan.overview}</Typography.Paragraph>
+            <Typography.Text type="secondary">DUT：{activePlan.dut_description}</Typography.Text>
+            <List
+              style={{ marginTop: 16 }}
+              dataSource={activePlan.items}
+              renderItem={(item) => (
+                <List.Item>
+                  <List.Item.Meta title={`${item.sequence}. ${item.title}`} description={`${item.objective}；依据：${item.evidence}`} />
+                </List.Item>
+              )}
+            />
+          </>
         )}
       </Modal>
     </section>

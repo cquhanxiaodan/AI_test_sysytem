@@ -8,7 +8,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.core.config import get_settings
 from app.core.database import Base, session_scope
 from app.modules.ai.service import run_json_task
-from app.modules.requirements.service import get_analysis
+from app.modules.requirements.service import get_analysis, list_analyses
 from app.modules.validation_plans.docx_exporter import render_validation_plan_docx
 from app.modules.validation_plans.schemas import (
     ExportRecord,
@@ -26,7 +26,7 @@ class ValidationPlanRecord(Base):
 
     id: Mapped[str] = mapped_column(String(80), primary_key=True)
     project_id: Mapped[str] = mapped_column(String(120), index=True)
-    requirement_analysis_id: Mapped[str] = mapped_column(String(120), index=True)
+    requirement_analysis_ids: Mapped[list[str]] = mapped_column(JSON)
     title: Mapped[str] = mapped_column(String(500))
     template_version: Mapped[str] = mapped_column(String(80))
     overview: Mapped[str] = mapped_column(String(2000))
@@ -50,32 +50,70 @@ class ExportRecordModel(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
-def create_plan(requirement_analysis_id: str) -> ValidationPlanRead | None:
+def create_plan(requirement_analysis_id: str | None = None, project_id: str | None = None) -> ValidationPlanRead | None:
+    if project_id is not None:
+        return create_plan_from_project(project_id)
+    if requirement_analysis_id is not None:
+        return create_plan_from_single_analysis(requirement_analysis_id)
+    return None
+
+
+def create_plan_from_single_analysis(requirement_analysis_id: str) -> ValidationPlanRead | None:
     analysis = get_analysis(requirement_analysis_id)
     if analysis is None:
         return None
-    title = f"{analysis.parse_result.product_model or '待确认型号'} {analysis.parse_result.test_object} {analysis.parse_result.change_type}验证方案"
+    return _build_plan(analysis.project_id, [analysis])
+
+
+def create_plan_from_project(project_id: str) -> ValidationPlanRead | None:
+    analyses = list_analyses(project_id)
+    if not analyses:
+        return None
+    return _build_plan(project_id, analyses)
+
+
+def _build_plan(project_id: str, analyses: list) -> ValidationPlanRead:
+    analysis_ids = [analysis.id for analysis in analyses]
+    product_models = {analysis.parse_result.product_model for analysis in analyses if analysis.parse_result.product_model}
+    test_objects = {analysis.parse_result.test_object for analysis in analyses if analysis.parse_result.test_object != "待确认对象"}
+    change_types = {analysis.parse_result.change_type for analysis in analyses if analysis.parse_result.change_type != "待确认变更类型"}
+    title_parts = []
+    if product_models:
+        title_parts.append("/".join(sorted(product_models)))
+    if test_objects:
+        title_parts.append("/".join(sorted(test_objects)))
+    if change_types:
+        title_parts.append("/".join(sorted(change_types)))
+    title = " ".join(title_parts) + "验证方案" if title_parts else "综合验证方案"
+    all_items: list[ValidationPlanItem] = []
+    seen_titles: set[str] = set()
+    for analysis in analyses:
+        for recommendation in analysis.recommendations:
+            if recommendation.title in seen_titles:
+                continue
+            seen_titles.add(recommendation.title)
+            all_items.append(
+                ValidationPlanItem(
+                    sequence=len(all_items) + 1,
+                    title=recommendation.title,
+                    group=recommendation.group,
+                    objective=f"验证{recommendation.title}满足需求。",
+                    method="按既有验证方案模板执行测试步骤并记录结果。",
+                    record_template="记录样本编号、测试条件、实际结果、判定结论和关联 BUG。",
+                    evidence=recommendation.evidence,
+                )
+            )
+    overview_prefix = f"针对 {len(analyses)} 条需求分析" if len(analyses) > 1 else f"针对需求：{analyses[0].description}"
     plan = ValidationPlanRead(
         id=f"plan-{uuid4()}",
-        project_id=analysis.project_id,
-        requirement_analysis_id=analysis.id,
+        project_id=project_id,
+        requirement_analysis_ids=analysis_ids,
         title=title,
         template_version="validation-plan-v1",
-        overview=f"针对需求：{analysis.description}，生成验证方案草稿。",
-        dut_description=f"DUT：{analysis.parse_result.product_model or '待确认'}，测试对象：{analysis.parse_result.test_object}。",
+        overview=f"{overview_prefix}，生成验证方案草稿。",
+        dut_description=f"DUT：{'/'.join(sorted(product_models)) if product_models else '待确认'}，测试对象：{'/'.join(sorted(test_objects)) if test_objects else '待确认'}。",
         reference_documents=["测试规范", "历史验证方案", "Jira/DFMEA 风险项"],
-        items=[
-            ValidationPlanItem(
-                sequence=index + 1,
-                title=recommendation.title,
-                group=recommendation.group,
-                objective=f"验证{recommendation.title}满足需求。",
-                method="按既有验证方案模板执行测试步骤并记录结果。",
-                record_template="记录样本编号、测试条件、实际结果、判定结论和关联 BUG。",
-                evidence=recommendation.evidence,
-            )
-            for index, recommendation in enumerate(analysis.recommendations)
-        ],
+        items=all_items,
         status="draft",
         created_at=datetime.now(UTC),
     )
@@ -211,7 +249,7 @@ def _plan_read_to_record(plan: ValidationPlanRead) -> ValidationPlanRecord:
     return ValidationPlanRecord(
         id=plan.id,
         project_id=plan.project_id,
-        requirement_analysis_id=plan.requirement_analysis_id,
+        requirement_analysis_ids=plan.requirement_analysis_ids,
         title=plan.title,
         template_version=plan.template_version,
         overview=plan.overview,
@@ -227,7 +265,7 @@ def _plan_record_to_read(record: ValidationPlanRecord) -> ValidationPlanRead:
     return ValidationPlanRead(
         id=record.id,
         project_id=record.project_id,
-        requirement_analysis_id=record.requirement_analysis_id,
+        requirement_analysis_ids=record.requirement_analysis_ids or [],
         title=record.title,
         template_version=record.template_version,
         overview=record.overview,

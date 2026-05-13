@@ -146,7 +146,7 @@ export type RequirementBatchUploadResult = {
 export type ValidationPlan = {
   id: string;
   project_id: string;
-  requirement_analysis_id: string;
+  requirement_analysis_ids: string[];
   title: string;
   template_version: string;
   overview: string;
@@ -415,10 +415,10 @@ export async function fetchValidationPlans(projectId?: string) {
   return request<ValidationPlan[]>(`/api/validation-plans${query}`);
 }
 
-export async function createValidationPlan(requirementAnalysisId: string) {
+export async function createValidationPlan(projectId: string) {
   return request<ValidationPlan>("/api/validation-plans", {
     method: "POST",
-    body: JSON.stringify({ requirement_analysis_id: requirementAnalysisId }),
+    body: JSON.stringify({ project_id: projectId }),
   });
 }
 
