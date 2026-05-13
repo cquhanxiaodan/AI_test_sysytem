@@ -1,4 +1,4 @@
-import { Button, Card, Form, Input, message, Radio, Space, Table, Tabs, Tag, Typography } from "antd";
+import { Button, Card, Collapse, Form, Input, message, Radio, Space, Table, Tabs, Tag, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useState } from "react";
 import {
@@ -117,8 +117,14 @@ export default function TestAssetsPage() {
     <section>
       <Typography.Title level={2}>测试资产</Typography.Title>
       <Typography.Paragraph type="secondary">
-        管理测试条目资产、测试归口包和风险覆盖关系。
+        查看由统一资料池自动沉淀的测试条目、测试归口包和风险知识项。验证方案/测试规范发布后自动拆分测试条目并生成归口包，Jira/DFMEA 发布后自动解析为风险知识源。
       </Typography.Paragraph>
+      <Card className="section-card">
+        <Typography.Title level={4}>自动生成规则</Typography.Title>
+        <Typography.Paragraph>
+          在统一资料池上传资料并确认标签，管理员发布资料后，系统按文档类型自动处理：验证方案/测试规范生成测试条目和归口包，Jira/DFMEA 生成风险知识项。本页用于查看、审核和发布资产。
+        </Typography.Paragraph>
+      </Card>
       <Card>
         <Tabs
           items={[
@@ -127,12 +133,9 @@ export default function TestAssetsPage() {
               label: "测试条目",
               children: (
                 <Space direction="vertical" className="full-width" size="middle">
-                  <Form form={form} layout="inline" onFinish={splitDocument}>
-                    <Form.Item name="documentId" rules={[{ required: true, message: "请输入资料 ID" }]}>
-                      <Input placeholder="输入资料 ID 后拆分测试条目" className="wide-input" />
-                    </Form.Item>
-                    <Button type="primary" htmlType="submit">拆分方案</Button>
-                  </Form>
+                  <Typography.Paragraph type="secondary">
+                    测试条目来自已发布的验证方案、测试规范或测试报告。正常流程在资料池发布后自动生成。
+                  </Typography.Paragraph>
                   <Table rowKey="id" loading={loading} columns={columns} dataSource={items} pagination={false} />
                 </Space>
               ),
@@ -142,7 +145,9 @@ export default function TestAssetsPage() {
               label: "测试归口包",
               children: (
                 <Space direction="vertical" className="full-width" size="middle">
-                  <Button type="primary" onClick={generatePackage}>生成 RFID 供应商变更验证包</Button>
+                  <Typography.Paragraph type="secondary">
+                    归口包由测试条目自动归并生成，用于需求分析阶段推荐必测、建议和条件触发测试。
+                  </Typography.Paragraph>
                   <Table rowKey="id" loading={loading} columns={packageColumns} dataSource={packages} pagination={false} />
                 </Space>
               ),
@@ -152,17 +157,53 @@ export default function TestAssetsPage() {
               label: "风险知识源",
               children: (
                 <Space direction="vertical" className="full-width" size="middle">
-                  <Form layout="vertical" onFinish={parseRiskSource} initialValues={{ sourceType: "jira" }}>
-                    <Form.Item label="来源类型" name="sourceType">
-                      <Radio.Group options={[{ label: "Jira", value: "jira" }, { label: "DFMEA", value: "dfmea" }]} />
-                    </Form.Item>
-                    <Form.Item label="CSV 内容" name="content" rules={[{ required: true, message: "请输入 CSV 内容" }]}>
-                      <Input.TextArea rows={5} placeholder="例如：key,title,description\nG99-1,RFID读取失败,更换供应商后偶发读取失败" />
-                    </Form.Item>
-                    <Button type="primary" htmlType="submit">解析风险源</Button>
-                  </Form>
+                  <Typography.Paragraph type="secondary">
+                    风险知识源来自统一资料池中已发布的 Jira 导出和 DFMEA 文件。上传文件并发布后即可入库。
+                  </Typography.Paragraph>
                   <Table rowKey="id" loading={loading} columns={riskColumns} dataSource={risks} pagination={false} />
                 </Space>
+              ),
+            },
+            {
+              key: "maintenance",
+              label: "维护工具",
+              children: (
+                <Collapse
+                  items={[
+                    {
+                      key: "split",
+                      label: "手动补拆测试条目",
+                      children: (
+                        <Form form={form} layout="inline" onFinish={splitDocument}>
+                          <Form.Item name="documentId" rules={[{ required: true, message: "请输入资料 ID" }]}> 
+                            <Input placeholder="仅用于补救：输入资料 ID" className="wide-input" />
+                          </Form.Item>
+                          <Button type="primary" htmlType="submit">补拆条目</Button>
+                        </Form>
+                      ),
+                    },
+                    {
+                      key: "package",
+                      label: "手动补生成归口包",
+                      children: <Button type="primary" onClick={generatePackage}>补生成 RFID 供应商变更验证包</Button>,
+                    },
+                    {
+                      key: "risk",
+                      label: "手动补解析风险源",
+                      children: (
+                        <Form layout="vertical" onFinish={parseRiskSource} initialValues={{ sourceType: "jira" }}>
+                          <Form.Item label="来源类型" name="sourceType">
+                            <Radio.Group options={[{ label: "Jira", value: "jira" }, { label: "DFMEA", value: "dfmea" }]} />
+                          </Form.Item>
+                          <Form.Item label="CSV 内容" name="content" rules={[{ required: true, message: "请输入 CSV 内容" }]}> 
+                            <Input.TextArea rows={5} placeholder="仅用于补救：key,title,description\nG99-1,RFID读取失败,更换供应商后偶发读取失败" />
+                          </Form.Item>
+                          <Button type="primary" htmlType="submit">补解析风险源</Button>
+                        </Form>
+                      ),
+                    },
+                  ]}
+                />
               ),
             },
           ]}

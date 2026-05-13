@@ -148,6 +148,15 @@ export type AcceptanceStatus = {
   remaining_risks: string[];
 };
 
+export type SystemConfig = {
+  subsystem_catalog: string[];
+  document_types: string[];
+  test_types: string[];
+  change_types: string[];
+  ai_external_reference_enabled: boolean;
+  validation_template_version: string;
+};
+
 export function getToken() {
   return window.localStorage.getItem(TOKEN_KEY);
 }
@@ -308,4 +317,8 @@ export async function exportValidationPlan(planId: string) {
 
 export async function fetchAcceptanceStatus() {
   return request<AcceptanceStatus>("/api/admin/acceptance-status");
+}
+
+export async function fetchSystemConfig() {
+  return request<SystemConfig>("/api/admin/config");
 }

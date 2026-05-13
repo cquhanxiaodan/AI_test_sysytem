@@ -191,6 +191,10 @@ def infer_label_suggestions(filename: str) -> list[DocumentLabelSuggestion]:
         suggestions.append(DocumentLabelSuggestion(label_key="subsystem", label_value="RFID", confidence=0.96, evidence="文件名包含 RFID"))
     if "验证方案" in filename:
         suggestions.append(DocumentLabelSuggestion(label_key="document_type", label_value="验证方案", confidence=0.9, evidence="文件名包含验证方案"))
+    if "jira" in lowered:
+        suggestions.append(DocumentLabelSuggestion(label_key="document_type", label_value="Jira导出", confidence=0.9, evidence="文件名包含 Jira"))
+    if "dfmea" in lowered:
+        suggestions.append(DocumentLabelSuggestion(label_key="document_type", label_value="DFMEA", confidence=0.9, evidence="文件名包含 DFMEA"))
     if "供应商" in filename or "二供" in filename:
         suggestions.append(DocumentLabelSuggestion(label_key="change_type", label_value="供应商变更", confidence=0.82, evidence="文件名包含供应商或二供"))
     return suggestions

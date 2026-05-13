@@ -16,8 +16,8 @@ const { Header, Sider, Content } = Layout;
 const menuItems = [
   { key: "/", icon: <AppstoreOutlined />, label: "项目工作台" },
   { key: "/documents", icon: <FolderOpenOutlined />, label: "统一资料池" },
-  { key: "/requirements", icon: <FileSearchOutlined />, label: "需求分析" },
   { key: "/test-assets", icon: <ExperimentOutlined />, label: "测试资产" },
+  { key: "/requirements", icon: <FileSearchOutlined />, label: "需求分析" },
   { key: "/validation-plans", icon: <ProfileOutlined />, label: "验证方案" },
 ];
 

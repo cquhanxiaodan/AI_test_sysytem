@@ -61,10 +61,10 @@ def list_audit_events() -> list[AuditEvent]:
 
 def get_acceptance_status() -> AcceptanceStatus:
     return AcceptanceStatus(
-        completed_stages=["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "12"],
-        backend_test_count=23,
+        completed_stages=["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13"],
+        backend_test_count=33,
         frontend_build="passed",
-        remaining_risks=["Docker Compose 未在当前环境验证", "真实 Word 渲染仍为接口占位", "Ant Design 首包后续需要路由懒加载优化"],
+        remaining_risks=["Docker Compose 未在当前环境验证", "真实 Word/PDF/Excel 深度解析后续需要替换轻量启发式解析", "Celery 异步任务和 pgvector 检索后续需要接入"],
     )
 
 

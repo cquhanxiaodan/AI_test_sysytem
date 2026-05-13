@@ -9,7 +9,21 @@
 - `frontend/`：React + TypeScript + Vite + Ant Design 前端工作台。
 - `deploy/`：Docker Compose、本地数据库和基础设施初始化脚本。
 - `templates/`：验证方案 Word 模板目录。
+- `docs/user-guide.md`：端到端使用说明，覆盖统一资料池、测试资产、AI 调用、需求分析和验证方案导出。
 - `.monkeycode/specs/gene-sequencer-ai-test-mvp/`：需求、架构、API、AI Schema、实施计划和任务清单。
+
+## 主流程
+
+MVP 主流程以统一资料池为入口：
+
+1. 上传测试规范、验证方案、测试报告、Jira 导出或 DFMEA 文件。
+2. 确认系统识别出的产品型号、子系统、文档类型和变更类型标签。
+3. 管理员发布资料。
+4. 系统按文档类型自动生成测试条目、测试归口包或风险知识项。
+5. 测试工程师输入新需求或变更描述，系统基于测试资产和风险知识源推荐测试项。
+6. 生成验证方案草稿，完整性检查后导出 Word 文件。
+
+详细操作见 `docs/user-guide.md`。
 
 ## 本地启动
 

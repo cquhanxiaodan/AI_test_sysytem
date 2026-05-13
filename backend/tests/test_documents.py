@@ -2,6 +2,10 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.modules.documents.repository import DOCUMENTS, get_document_content
+from app.modules.parsing.service import CHUNKS, TASKS
+from app.modules.risks.service import RISKS
+from app.modules.test_items.service import TEST_ITEMS
+from app.modules.test_packages.service import TEST_PACKAGES
 
 
 client = TestClient(app)
@@ -15,6 +19,11 @@ def auth_headers(username: str = "admin", password: str = "admin123") -> dict[st
 
 def setup_function() -> None:
     DOCUMENTS.clear()
+    TASKS.clear()
+    CHUNKS.clear()
+    TEST_ITEMS.clear()
+    TEST_PACKAGES.clear()
+    RISKS.clear()
 
 
 def test_upload_document_suggests_labels() -> None:
@@ -71,6 +80,49 @@ def test_admin_can_publish_document() -> None:
 
     assert response.status_code == 200
     assert response.json()["status"] == "published"
+
+
+def test_publish_validation_plan_auto_generates_test_assets() -> None:
+    headers = auth_headers()
+    upload = client.post(
+        "/api/documents/upload",
+        headers=headers,
+        data={"project_id": "project-g99-rfid"},
+        files={"file": ("DNBSEQ-G99 RFID验证方案.txt", b"RFID supplier change validation", "text/plain")},
+    )
+    document_id = upload.json()["document"]["id"]
+    client.patch(
+        f"/api/documents/{document_id}/labels",
+        headers=headers,
+        json={"labels": {"product_model": "DNBSEQ-G99", "subsystem": "RFID", "document_type": "验证方案"}},
+    )
+
+    response = client.post(f"/api/documents/{document_id}/review", headers=headers, json={"action": "publish"})
+
+    assert response.status_code == 200
+    assert len(TEST_ITEMS) == 5
+    assert len(TEST_PACKAGES) == 1
+
+
+def test_publish_jira_document_auto_parses_risks() -> None:
+    headers = auth_headers()
+    upload = client.post(
+        "/api/documents/upload",
+        headers=headers,
+        data={"project_id": "project-g99-rfid"},
+        files={"file": ("jira-rfid.csv", "title,description\nRFID读取失败,供应商变更后偶发失败\n".encode("utf-8"), "text/csv")},
+    )
+    document_id = upload.json()["document"]["id"]
+    client.patch(
+        f"/api/documents/{document_id}/labels",
+        headers=headers,
+        json={"labels": {"document_type": "Jira导出", "subsystem": "RFID"}},
+    )
+
+    response = client.post(f"/api/documents/{document_id}/review", headers=headers, json={"action": "publish"})
+
+    assert response.status_code == 200
+    assert len(RISKS) == 1
 
 
 def test_tester_cannot_access_unassigned_project_upload() -> None:

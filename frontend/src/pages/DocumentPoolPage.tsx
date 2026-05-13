@@ -38,7 +38,7 @@ export default function DocumentPoolPage() {
   async function handleUpload(file: File) {
     if (!currentProject) return false;
     await uploadDocument(currentProject.id, file);
-    message.success("资料已上传，等待标签确认");
+    message.success("资料已上传，请确认标签；管理员发布后系统会自动沉淀对应测试资产");
     await loadDocuments();
     return false;
   }
@@ -114,7 +114,7 @@ export default function DocumentPoolPage() {
         <div>
           <Typography.Title level={2}>统一资料池</Typography.Title>
           <Typography.Paragraph type="secondary">
-            上传测试规范、验证方案、测试报告、Jira 导出和 DFMEA 文件，经过标签确认、去重和管理员审核后进入可用资料池。
+            上传测试规范、验证方案、测试报告、Jira 导出和 DFMEA 文件。资料发布后会按文档类型自动进入解析、测试条目拆分、归口包生成或风险知识源入库流程。
           </Typography.Paragraph>
         </div>
         <Upload beforeUpload={handleUpload} showUploadList={false}>

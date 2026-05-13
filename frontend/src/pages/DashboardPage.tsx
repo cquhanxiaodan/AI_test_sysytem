@@ -1,14 +1,16 @@
 import { Card, Col, Descriptions, List, Row, Statistic, Tag, Typography } from "antd";
 import { useEffect, useState } from "react";
-import { AcceptanceStatus, fetchAcceptanceStatus } from "../api/client";
+import { AcceptanceStatus, fetchAcceptanceStatus, fetchSystemConfig, SystemConfig } from "../api/client";
 import { useProjects } from "../context/ProjectContext";
 
 export default function DashboardPage() {
   const { currentProject } = useProjects();
   const [acceptance, setAcceptance] = useState<AcceptanceStatus | null>(null);
+  const [systemConfig, setSystemConfig] = useState<SystemConfig | null>(null);
 
   useEffect(() => {
     fetchAcceptanceStatus().then(setAcceptance).catch(() => setAcceptance(null));
+    fetchSystemConfig().then(setSystemConfig).catch(() => setSystemConfig(null));
   }, []);
 
   return (
@@ -43,6 +45,26 @@ export default function DashboardPage() {
                   {rule.label_key}: {rule.label_value}
                 </Tag>
               ))}
+            </Descriptions.Item>
+          </Descriptions>
+        </Card>
+      )}
+      {systemConfig && (
+        <Card title="AI 大模型接入与调用" className="section-card">
+          <Descriptions column={1} size="small">
+            <Descriptions.Item label="外部参考开关">
+              <Tag color={systemConfig.ai_external_reference_enabled ? "green" : "default"}>
+                {systemConfig.ai_external_reference_enabled ? "已开启" : "默认关闭"}
+              </Tag>
+            </Descriptions.Item>
+            <Descriptions.Item label="本地 AI 调用">
+              资料池标签识别、需求推荐和验证方案完整性检查会调用本地结构化 AI 编排接口。
+            </Descriptions.Item>
+            <Descriptions.Item label="外部模型策略">
+              联网大模型仅作为受控外部参考，需脱敏、标记来源，并经人工审核后进入验证方案。
+            </Descriptions.Item>
+            <Descriptions.Item label="接口入口">
+              /api/ai/validate 用于校验结构化输出，/api/ai/runs 用于记录可追溯调用。
             </Descriptions.Item>
           </Descriptions>
         </Card>
