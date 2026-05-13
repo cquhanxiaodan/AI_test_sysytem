@@ -2,7 +2,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
+from sqlalchemy import DateTime, JSON, String, select
+from sqlalchemy.orm import Mapped, mapped_column
+
 from app.core.config import get_settings
+from app.core.database import Base, session_scope
 from app.modules.requirements.service import get_analysis
 from app.modules.validation_plans.docx_exporter import render_validation_plan_docx
 from app.modules.validation_plans.schemas import (
@@ -14,6 +18,35 @@ from app.modules.validation_plans.schemas import (
 
 PLANS: dict[str, ValidationPlanRead] = {}
 EXPORTS: dict[str, ExportRecord] = {}
+
+
+class ValidationPlanRecord(Base):
+    __tablename__ = "validation_plans"
+
+    id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(120), index=True)
+    requirement_analysis_id: Mapped[str] = mapped_column(String(120), index=True)
+    title: Mapped[str] = mapped_column(String(500))
+    template_version: Mapped[str] = mapped_column(String(80))
+    overview: Mapped[str] = mapped_column(String(2000))
+    dut_description: Mapped[str] = mapped_column(String(2000))
+    reference_documents: Mapped[list[str]] = mapped_column(JSON)
+    items: Mapped[list[dict]] = mapped_column(JSON)
+    status: Mapped[str] = mapped_column(String(80), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class ExportRecordModel(Base):
+    __tablename__ = "validation_plan_exports"
+
+    id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    validation_plan_id: Mapped[str] = mapped_column(String(120), index=True)
+    filename: Mapped[str] = mapped_column(String(500))
+    template_version: Mapped[str] = mapped_column(String(80))
+    status: Mapped[str] = mapped_column(String(80), index=True)
+    storage_path: Mapped[str] = mapped_column(String(1000))
+    download_url: Mapped[str] = mapped_column(String(500))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
 def create_plan(requirement_analysis_id: str) -> ValidationPlanRead | None:
@@ -45,15 +78,27 @@ def create_plan(requirement_analysis_id: str) -> ValidationPlanRead | None:
         status="draft",
         created_at=datetime.now(UTC),
     )
-    PLANS[plan.id] = plan
+    _save_plan(plan)
     return plan
 
 
 def get_plan(plan_id: str) -> ValidationPlanRead | None:
+    if _use_sqlalchemy():
+        with session_scope() as session:
+            record = session.get(ValidationPlanRecord, plan_id)
+            return _plan_record_to_read(record) if record is not None else None
     return PLANS.get(plan_id)
 
 
 def list_plans(project_id: str | None = None) -> list[ValidationPlanRead]:
+    if _use_sqlalchemy():
+        with session_scope() as session:
+            statement = select(ValidationPlanRecord)
+            if project_id is not None:
+                statement = statement.where(ValidationPlanRecord.project_id == project_id)
+            records = session.scalars(statement).all()
+            plans = [_plan_record_to_read(record) for record in records]
+            return sorted(plans, key=lambda plan: plan.created_at, reverse=True)
     plans = list(PLANS.values())
     if project_id is not None:
         plans = [plan for plan in plans if plan.project_id == project_id]
@@ -95,9 +140,91 @@ def export_plan(plan_id: str) -> ExportRecord | None:
         download_url=f"/api/validation-plans/exports/{export_id}/download",
         created_at=datetime.now(UTC),
     )
-    EXPORTS[record.id] = record
+    _save_export(record)
     return record
 
 
 def get_export(export_id: str) -> ExportRecord | None:
+    if _use_sqlalchemy():
+        with session_scope() as session:
+            record = session.get(ExportRecordModel, export_id)
+            return _export_record_to_read(record) if record is not None else None
     return EXPORTS.get(export_id)
+
+
+def _use_sqlalchemy() -> bool:
+    return get_settings().repository_backend == "sqlalchemy"
+
+
+def _save_plan(plan: ValidationPlanRead) -> None:
+    if _use_sqlalchemy():
+        with session_scope() as session:
+            session.merge(_plan_read_to_record(plan))
+        return
+    PLANS[plan.id] = plan
+
+
+def _save_export(record: ExportRecord) -> None:
+    if _use_sqlalchemy():
+        with session_scope() as session:
+            session.merge(_export_read_to_record(record))
+        return
+    EXPORTS[record.id] = record
+
+
+def _plan_read_to_record(plan: ValidationPlanRead) -> ValidationPlanRecord:
+    return ValidationPlanRecord(
+        id=plan.id,
+        project_id=plan.project_id,
+        requirement_analysis_id=plan.requirement_analysis_id,
+        title=plan.title,
+        template_version=plan.template_version,
+        overview=plan.overview,
+        dut_description=plan.dut_description,
+        reference_documents=plan.reference_documents,
+        items=[item.model_dump() for item in plan.items],
+        status=plan.status,
+        created_at=plan.created_at,
+    )
+
+
+def _plan_record_to_read(record: ValidationPlanRecord) -> ValidationPlanRead:
+    return ValidationPlanRead(
+        id=record.id,
+        project_id=record.project_id,
+        requirement_analysis_id=record.requirement_analysis_id,
+        title=record.title,
+        template_version=record.template_version,
+        overview=record.overview,
+        dut_description=record.dut_description,
+        reference_documents=record.reference_documents or [],
+        items=[ValidationPlanItem(**item) for item in (record.items or [])],
+        status=record.status,
+        created_at=record.created_at,
+    )
+
+
+def _export_read_to_record(record: ExportRecord) -> ExportRecordModel:
+    return ExportRecordModel(
+        id=record.id,
+        validation_plan_id=record.validation_plan_id,
+        filename=record.filename,
+        template_version=record.template_version,
+        status=record.status,
+        storage_path=record.storage_path,
+        download_url=record.download_url,
+        created_at=record.created_at,
+    )
+
+
+def _export_record_to_read(record: ExportRecordModel) -> ExportRecord:
+    return ExportRecord(
+        id=record.id,
+        validation_plan_id=record.validation_plan_id,
+        filename=record.filename,
+        template_version=record.template_version,
+        status=record.status,
+        storage_path=record.storage_path,
+        download_url=record.download_url,
+        created_at=record.created_at,
+    )

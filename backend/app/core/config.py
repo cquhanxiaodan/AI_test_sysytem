@@ -8,6 +8,8 @@ class Settings(BaseSettings):
     app_name: str = "Gene Sequencer AI Test API"
     app_version: str = "0.1.0"
     environment: str = "local"
+    repository_backend: str = "memory"
+    storage_backend: str = "local"
 
     database_url: str = Field(
         default="postgresql+psycopg://app:app@postgres:5432/gene_test"

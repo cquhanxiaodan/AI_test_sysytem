@@ -26,6 +26,20 @@ docker compose -f deploy/docker-compose.yml up --build
 - PostgreSQL：`localhost:5432`
 - Redis：`localhost:6379`
 
+## 持久化配置
+
+`.env.example` 默认面向 Docker Compose，使用 PostgreSQL 和 MinIO：
+
+```bash
+# 使用 SQLAlchemy repository 写入数据库
+REPOSITORY_BACKEND="sqlalchemy"
+
+# 使用 MinIO 保存上传资料和导出文件
+STORAGE_BACKEND="minio"
+```
+
+单独运行后端测试时，默认代码配置仍使用内存仓库和本地文件存储，方便在没有 PostgreSQL、MinIO 或 Docker 的环境中快速验证。
+
 ## 单独运行后端测试
 
 ```bash
