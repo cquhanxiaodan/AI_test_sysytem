@@ -4,12 +4,11 @@ import { UploadOutlined } from "@ant-design/icons";
 import { useEffect, useState } from "react";
 import {
   createRequirementAnalysis,
+  downloadRequirementTemplate,
   fetchRequirementTemplate,
-  getRequirementTemplateDownloadUrl,
   RequirementAnalysis,
   RequirementBatchUploadResult,
   RequirementTemplate,
-  uploadRequirementDocument,
   uploadRequirementTable,
 } from "../api/client";
 import { useProjects } from "../context/ProjectContext";
@@ -24,6 +23,7 @@ export default function RequirementAnalysisPage() {
   const { currentProject } = useProjects();
   const [analysis, setAnalysis] = useState<RequirementAnalysis | null>(null);
   const [batchResult, setBatchResult] = useState<RequirementBatchUploadResult | null>(null);
+  const [batchFile, setBatchFile] = useState<File | null>(null);
   const [template, setTemplate] = useState<RequirementTemplate | null>(null);
   const [form] = Form.useForm<{ description: string }>();
 
@@ -33,30 +33,35 @@ export default function RequirementAnalysisPage() {
 
   async function submit(values: { description: string }) {
     if (!currentProject) return;
+    if (batchFile) {
+      const result = await uploadRequirementTable(currentProject.id, batchFile);
+      setBatchResult(result);
+      setAnalysis(null);
+      const successCount = result.items.filter((item) => item.analysis).length;
+      message.success(`已分析 ${result.items.length} 条需求，其中 ${successCount} 条完成分析`);
+      return;
+    }
     const result = await createRequirementAnalysis(currentProject.id, values.description);
     setAnalysis(result);
+    setBatchResult(null);
     message.success("需求分析完成");
   }
 
-  async function handleUpload(file: File) {
-    if (!currentProject) return false;
-    const result = await uploadRequirementDocument(currentProject.id, file);
-    form.setFieldsValue({ description: result.description });
-    message.success(`已解析需求文档：${result.filename}`);
+  function handleTableUpload(file: File) {
+    setBatchFile(file);
+    setBatchResult(null);
+    message.success(`已选择需求批量分析文件：${file.name}，点击开始分析后执行`);
     return false;
   }
 
-  async function handleTableUpload(file: File) {
-    if (!currentProject) return false;
-    const result = await uploadRequirementTable(currentProject.id, file);
-    setBatchResult(result);
-    const successCount = result.items.filter((item) => item.analysis).length;
-    message.success(`已解析 ${result.items.length} 条需求，其中 ${successCount} 条完成分析`);
-    return false;
-  }
-
-  function fillStandardTemplate() {
-    form.setFieldsValue({ description: STANDARD_REQUIREMENT_TEMPLATE });
+  async function handleTemplateDownload() {
+    const blob = await downloadRequirementTemplate();
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "requirement-analysis-template.csv";
+    link.click();
+    window.URL.revokeObjectURL(url);
   }
 
   const batchColumns: ColumnsType<RequirementBatchUploadResult["items"][number]> = [
@@ -106,14 +111,10 @@ export default function RequirementAnalysisPage() {
           </Form.Item>
           <Space wrap>
             <Button type="primary" htmlType="submit">开始分析</Button>
-            <Upload beforeUpload={handleUpload} showUploadList={false} accept=".txt,.md,.csv,.doc,.docx,.pdf">
-              <Button icon={<UploadOutlined />}>上传需求文档</Button>
-            </Upload>
+            <Button onClick={handleTemplateDownload}>下载需求批量分析模版</Button>
             <Upload beforeUpload={handleTableUpload} showUploadList={false} accept=".csv">
-              <Button icon={<UploadOutlined />}>上传模板表格批量分析</Button>
+              <Button icon={<UploadOutlined />}>{batchFile ? `已选择：${batchFile.name}` : "上传需求批量分析"}</Button>
             </Upload>
-            <Button href={getRequirementTemplateDownloadUrl()}>下载模板表格</Button>
-            <Button onClick={fillStandardTemplate}>填入标准格式</Button>
           </Space>
         </Form>
       </Card>

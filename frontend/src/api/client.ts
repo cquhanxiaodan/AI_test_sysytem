@@ -298,25 +298,6 @@ export async function parseRisks(projectId: string, sourceType: string, content:
   });
 }
 
-export async function uploadRequirementDocument(projectId: string, file: File) {
-  const token = getToken();
-  const body = new FormData();
-  body.append("project_id", projectId);
-  body.append("file", file);
-
-  const response = await fetch("/api/requirement-analyses/upload", {
-    method: "POST",
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-    body,
-  });
-
-  if (!response.ok) {
-    throw new Error(await response.text());
-  }
-
-  return response.json() as Promise<{ filename: string; description: string }>;
-}
-
 export async function uploadRequirementTable(projectId: string, file: File) {
   const token = getToken();
   const body = new FormData();
@@ -340,8 +321,17 @@ export async function fetchRequirementTemplate() {
   return request<RequirementTemplate>("/api/requirement-analyses/template");
 }
 
-export function getRequirementTemplateDownloadUrl() {
-  return "/api/requirement-analyses/template/download";
+export async function downloadRequirementTemplate() {
+  const token = getToken();
+  const response = await fetch("/api/requirement-analyses/template/download", {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+
+  if (!response.ok) {
+    throw new Error(await response.text());
+  }
+
+  return response.blob();
 }
 
 export async function createRequirementAnalysis(projectId: string, description: string) {
