@@ -82,3 +82,12 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 本地无外部依赖测试默认使用 `REPOSITORY_BACKEND=memory` 和 `STORAGE_BACKEND=local`。
   - Docker Compose 部署使用 `REPOSITORY_BACKEND=sqlalchemy` 和 `STORAGE_BACKEND=minio`。
   - SQLAlchemy 路径启动时通过 FastAPI lifespan 调用 `init_database()` 自动建表。
+
+[产品部署形态]
+- Date: 2026-05-13
+- Context: 用户询问成品后续需要什么部署环境和使用形态时明确
+- Category: 环境配置
+- Instructions:
+  - 成品定位为浏览器访问的 Web 界面化内部工具。
+  - 部署由前端 Web、FastAPI 后端、Celery Worker、PostgreSQL、Redis 和 MinIO 组成。
+  - 单机试用可用 Docker Compose，团队/生产部署建议拆分到服务器或内网容器平台。

@@ -36,7 +36,20 @@ def session_scope() -> Generator[Session, None, None]:
 
 def init_database() -> None:
     from app.modules.documents.repository import DocumentRecord
+    from app.modules.parsing.service import DocumentChunkRecord, ParsingTaskRecord
+    from app.modules.risks.service import RiskRecord
+    from app.modules.test_items.service import TestItemRecord
+    from app.modules.test_packages.service import TestPackageRecord
     from app.modules.validation_plans.service import ExportRecordModel, ValidationPlanRecord
 
-    _ = (DocumentRecord, ExportRecordModel, ValidationPlanRecord)
+    _ = (
+        DocumentRecord,
+        DocumentChunkRecord,
+        ParsingTaskRecord,
+        RiskRecord,
+        TestItemRecord,
+        TestPackageRecord,
+        ExportRecordModel,
+        ValidationPlanRecord,
+    )
     Base.metadata.create_all(bind=get_engine())
