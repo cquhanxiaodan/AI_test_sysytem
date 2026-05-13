@@ -25,6 +25,11 @@ class RequirementAnalysisRequest(BaseModel):
     description: str
 
 
+class RequirementDocumentUploadResponse(BaseModel):
+    filename: str
+    description: str
+
+
 class RequirementAnalysisRead(BaseModel):
     id: str
     project_id: str

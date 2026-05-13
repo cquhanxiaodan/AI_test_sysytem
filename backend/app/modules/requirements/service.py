@@ -16,6 +16,19 @@ from app.modules.test_packages.service import list_packages
 
 ANALYSES: dict[str, RequirementAnalysisRead] = {}
 
+STANDARD_REQUIREMENT_SECTIONS = {
+    "需求标题",
+    "产品型号",
+    "变更对象",
+    "所属子系统",
+    "变更类型",
+    "变更背景",
+    "变更内容",
+    "影响范围",
+    "验收标准",
+    "已知风险",
+}
+
 
 class RequirementAnalysisRecord(Base):
     __tablename__ = "requirement_analyses"
@@ -45,6 +58,35 @@ def create_analysis(project_id: str, description: str) -> RequirementAnalysisRea
     return analysis
 
 
+def extract_requirement_description(filename: str, content: bytes) -> str:
+    text = decode_requirement_content(content)
+    normalized = normalize_requirement_text(text)
+    if normalized:
+        return normalized
+    return f"需求标题：{filename}\n产品型号：待确认\n变更对象：待确认\n所属子系统：待确认\n变更类型：待确认\n变更背景：待补充\n变更内容：待补充\n影响范围：待补充\n验收标准：待补充\n已知风险：待补充"
+
+
+def decode_requirement_content(content: bytes) -> str:
+    for encoding in ("utf-8-sig", "utf-8", "gb18030"):
+        try:
+            return content.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    return ""
+
+
+def normalize_requirement_text(text: str) -> str:
+    lines = [line.strip() for line in text.replace("\r\n", "\n").replace("\r", "\n").split("\n")]
+    lines = [line for line in lines if line]
+    if not lines:
+        return ""
+    structured_lines = [line for line in lines if "：" in line or ":" in line]
+    matched_sections = {line.split("：", 1)[0].split(":", 1)[0].strip() for line in structured_lines}
+    if STANDARD_REQUIREMENT_SECTIONS.intersection(matched_sections):
+        return "\n".join(lines)
+    return "\n".join(["需求标题：待确认", *lines])
+
+
 def get_analysis(analysis_id: str) -> RequirementAnalysisRead | None:
     if _use_sqlalchemy():
         with session_scope() as session:
@@ -57,7 +99,7 @@ def parse_requirement(description: str) -> RequirementParseResult:
     lowered = description.lower()
     product_model = "DNBSEQ-G99" if "g99" in lowered or "dnbseq-g99" in lowered else None
     test_object = "RFID" if "rfid" in lowered else "待确认对象"
-    change_type = "供应商变更" if "供应商" in description or "二供" in description else "待确认变更类型"
+    change_type = parse_change_type(description)
     subsystem = "RFID" if test_object == "RFID" else "待确认子系统"
     missing_fields = []
     if product_model is None:
@@ -71,6 +113,17 @@ def parse_requirement(description: str) -> RequirementParseResult:
         subsystem=subsystem,
         missing_fields=missing_fields,
     )
+
+
+def parse_change_type(description: str) -> str:
+    for line in description.replace("\r\n", "\n").replace("\r", "\n").split("\n"):
+        normalized = line.strip()
+        if normalized.startswith("变更类型：") or normalized.startswith("变更类型:"):
+            value = normalized.split("：", 1)[-1] if "：" in normalized else normalized.split(":", 1)[-1]
+            return value.strip() or "待确认变更类型"
+    if "供应商" in description or "二供" in description:
+        return "供应商变更"
+    return "待确认变更类型"
 
 
 def build_recommendations(project_id: str, parse_result: RequirementParseResult) -> list[RequirementRecommendation]:

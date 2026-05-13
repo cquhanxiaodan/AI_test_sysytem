@@ -60,3 +60,44 @@ def test_requirement_analysis_recommends_rfid_package_and_risks() -> None:
     assert analysis["parse_result"]["test_object"] == "RFID"
     groups = {item["group"] for item in analysis["recommendations"]}
     assert {"必测", "建议", "条件触发", "风险补充"}.issubset(groups)
+
+
+def test_upload_requirement_document_extracts_standard_description() -> None:
+    headers = auth_headers()
+
+    response = client.post(
+        "/api/requirement-analyses/upload",
+        headers=headers,
+        data={"project_id": "project-g99-rfid"},
+        files={
+            "file": (
+                "rfid-requirement.txt",
+                "需求标题：RFID 二供导入\n产品型号：DNBSEQ-G99\n变更对象：RFID\n变更类型：供应商变更\n".encode("utf-8"),
+                "text/plain",
+            )
+        },
+    )
+
+    assert response.status_code == 200
+    result = response.json()
+    assert result["filename"] == "rfid-requirement.txt"
+    assert "变更对象：RFID" in result["description"]
+
+
+def test_requirement_analysis_accepts_standard_format() -> None:
+    headers = auth_headers()
+    seed_assets(headers)
+
+    response = client.post(
+        "/api/requirement-analyses",
+        headers=headers,
+        json={
+            "project_id": "project-g99-rfid",
+            "description": "需求标题：RFID 二供导入\n产品型号：DNBSEQ-G99\n变更对象：RFID\n所属子系统：RFID\n变更类型：供应商变更\n变更内容：导入二供供应商",
+        },
+    )
+
+    assert response.status_code == 200
+    analysis = response.json()
+    assert analysis["parse_result"]["test_object"] == "RFID"
+    assert analysis["parse_result"]["change_type"] == "供应商变更"
