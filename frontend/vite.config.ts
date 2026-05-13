@@ -7,7 +7,7 @@ export default defineConfig({
     allowedHosts: [".monkeycode-ai.online"],
     proxy: {
       "/api": {
-        target: "http://backend-api:8000",
+        target: "http://127.0.0.1:8000",
         changeOrigin: true,
       },
     },
