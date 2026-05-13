@@ -1,4 +1,6 @@
 from datetime import UTC, datetime
+import csv
+import io
 from uuid import uuid4
 
 from sqlalchemy import DateTime, JSON, String, Text
@@ -16,6 +18,8 @@ from app.modules.test_packages.service import list_packages
 
 ANALYSES: dict[str, RequirementAnalysisRead] = {}
 
+REQUIRED_REQUIREMENT_FIELDS = ["需求标题", "产品型号", "变更对象", "所属子系统", "变更类型", "变更背景", "变更内容"]
+OPTIONAL_REQUIREMENT_FIELDS = ["影响范围", "验收标准", "已知风险"]
 STANDARD_REQUIREMENT_SECTIONS = {
     "需求标题",
     "产品型号",
@@ -64,6 +68,74 @@ def extract_requirement_description(filename: str, content: bytes) -> str:
     if normalized:
         return normalized
     return f"需求标题：{filename}\n产品型号：待确认\n变更对象：待确认\n所属子系统：待确认\n变更类型：待确认\n变更背景：待补充\n变更内容：待补充\n影响范围：待补充\n验收标准：待补充\n已知风险：待补充"
+
+
+def get_requirement_template_fields() -> list[dict[str, str | bool]]:
+    descriptions = {
+        "需求标题": "用于区分每条需求的短标题",
+        "产品型号": "适用产品型号，例如 DNBSEQ-G99",
+        "变更对象": "本次变更涉及的对象，例如 RFID",
+        "所属子系统": "对象所属子系统，例如 RFID",
+        "变更类型": "供应商变更、设计变更、工艺变更等",
+        "变更背景": "说明为什么需要这次变更",
+        "变更内容": "说明具体变化点",
+        "影响范围": "可选，说明可能影响的测试范围",
+        "验收标准": "可选，说明通过标准",
+        "已知风险": "可选，说明已知问题或风险点",
+    }
+    return [
+        {"name": field, "required": field in REQUIRED_REQUIREMENT_FIELDS, "description": descriptions[field]}
+        for field in [*REQUIRED_REQUIREMENT_FIELDS, *OPTIONAL_REQUIREMENT_FIELDS]
+    ]
+
+
+def get_requirement_template_sample_rows() -> list[dict[str, str]]:
+    return [
+        {
+            "需求标题": "DNBSEQ-G99 RFID 二供供应商导入验证",
+            "产品型号": "DNBSEQ-G99",
+            "变更对象": "RFID",
+            "所属子系统": "RFID",
+            "变更类型": "供应商变更",
+            "变更背景": "现有 RFID 物料需引入二供供应商以降低供应风险",
+            "变更内容": "同步引入康奈特 RFID，保持功能规格和接口定义一致",
+            "影响范围": "在机装配、初始化、读取、写入、整机兼容性、安规 EMC 风险评估",
+            "验收标准": "RFID 可稳定完成在机装配、初始化、读取和写入，测试结果满足既有验证方案要求",
+            "已知风险": "二供物料可能存在读取失败、初始化异常、装配兼容性或 EMC 差异",
+        }
+    ]
+
+
+def build_requirement_template_csv() -> bytes:
+    output = io.StringIO()
+    fields = [*REQUIRED_REQUIREMENT_FIELDS, *OPTIONAL_REQUIREMENT_FIELDS]
+    writer = csv.DictWriter(output, fieldnames=fields)
+    writer.writeheader()
+    writer.writerows(get_requirement_template_sample_rows())
+    return output.getvalue().encode("utf-8-sig")
+
+
+def parse_requirement_table(content: bytes) -> list[tuple[int, str, list[str]]]:
+    text = decode_requirement_content(content)
+    reader = csv.DictReader(io.StringIO(text))
+    items: list[tuple[int, str, list[str]]] = []
+    for index, row in enumerate(reader, start=2):
+        normalized = {normalize_field_name(key): (value or "").strip() for key, value in row.items() if key is not None}
+        if not any(normalized.values()):
+            continue
+        missing_fields = [field for field in REQUIRED_REQUIREMENT_FIELDS if not normalized.get(field)]
+        description = build_requirement_description(normalized)
+        items.append((index, description, missing_fields))
+    return items
+
+
+def normalize_field_name(field: str) -> str:
+    return field.replace("\ufeff", "").strip()
+
+
+def build_requirement_description(row: dict[str, str]) -> str:
+    fields = [*REQUIRED_REQUIREMENT_FIELDS, *OPTIONAL_REQUIREMENT_FIELDS]
+    return "\n".join(f"{field}：{row.get(field, '').strip()}" for field in fields if row.get(field, "").strip())
 
 
 def decode_requirement_content(content: bytes) -> str:

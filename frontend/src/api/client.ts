@@ -116,6 +116,16 @@ export type RequirementAnalysis = {
   created_at: string;
 };
 
+export type RequirementTemplate = {
+  fields: Array<{ name: string; required: boolean; description: string }>;
+  sample_rows: Array<Record<string, string>>;
+};
+
+export type RequirementBatchUploadResult = {
+  filename: string;
+  items: Array<{ row_number: number; description: string; missing_fields: string[]; analysis: RequirementAnalysis | null }>;
+};
+
 export type ValidationPlan = {
   id: string;
   project_id: string;
@@ -305,6 +315,33 @@ export async function uploadRequirementDocument(projectId: string, file: File) {
   }
 
   return response.json() as Promise<{ filename: string; description: string }>;
+}
+
+export async function uploadRequirementTable(projectId: string, file: File) {
+  const token = getToken();
+  const body = new FormData();
+  body.append("project_id", projectId);
+  body.append("file", file);
+
+  const response = await fetch("/api/requirement-analyses/upload-table", {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body,
+  });
+
+  if (!response.ok) {
+    throw new Error(await response.text());
+  }
+
+  return response.json() as Promise<RequirementBatchUploadResult>;
+}
+
+export async function fetchRequirementTemplate() {
+  return request<RequirementTemplate>("/api/requirement-analyses/template");
+}
+
+export function getRequirementTemplateDownloadUrl() {
+  return "/api/requirement-analyses/template/download";
 }
 
 export async function createRequirementAnalysis(projectId: string, description: string) {

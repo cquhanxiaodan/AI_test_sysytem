@@ -101,3 +101,37 @@ def test_requirement_analysis_accepts_standard_format() -> None:
     analysis = response.json()
     assert analysis["parse_result"]["test_object"] == "RFID"
     assert analysis["parse_result"]["change_type"] == "供应商变更"
+
+
+def test_requirement_template_download_available() -> None:
+    headers = auth_headers()
+
+    response = client.get("/api/requirement-analyses/template/download", headers=headers)
+
+    assert response.status_code == 200
+    content = response.content.decode("utf-8-sig")
+    assert "需求标题,产品型号,变更对象,所属子系统,变更类型,变更背景,变更内容" in content
+
+
+def test_upload_requirement_table_batch_analyzes_valid_rows() -> None:
+    headers = auth_headers()
+    seed_assets(headers)
+    content = (
+        "需求标题,产品型号,变更对象,所属子系统,变更类型,变更背景,变更内容,影响范围,验收标准,已知风险\n"
+        "RFID 二供导入,DNBSEQ-G99,RFID,RFID,供应商变更,降低供应风险,同步引入康奈特 RFID,,,\n"
+        "缺字段需求,DNBSEQ-G99,RFID,RFID,供应商变更,降低供应风险,,,,\n"
+    )
+
+    response = client.post(
+        "/api/requirement-analyses/upload-table",
+        headers=headers,
+        data={"project_id": "project-g99-rfid"},
+        files={"file": ("requirements.csv", content.encode("utf-8-sig"), "text/csv")},
+    )
+
+    assert response.status_code == 200
+    result = response.json()
+    assert len(result["items"]) == 2
+    assert result["items"][0]["analysis"] is not None
+    assert result["items"][1]["analysis"] is None
+    assert "变更内容" in result["items"][1]["missing_fields"]

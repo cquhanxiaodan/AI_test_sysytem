@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from datetime import datetime
 
 from pydantic import BaseModel
@@ -28,6 +30,29 @@ class RequirementAnalysisRequest(BaseModel):
 class RequirementDocumentUploadResponse(BaseModel):
     filename: str
     description: str
+
+
+class RequirementTemplateField(BaseModel):
+    name: str
+    required: bool
+    description: str
+
+
+class RequirementTemplateRead(BaseModel):
+    fields: list[RequirementTemplateField]
+    sample_rows: list[dict[str, str]]
+
+
+class RequirementBatchItem(BaseModel):
+    row_number: int
+    description: str
+    missing_fields: list[str]
+    analysis: RequirementAnalysisRead | None
+
+
+class RequirementBatchUploadResponse(BaseModel):
+    filename: str
+    items: list[RequirementBatchItem]
 
 
 class RequirementAnalysisRead(BaseModel):
