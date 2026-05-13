@@ -3,6 +3,8 @@ from pathlib import Path
 
 from app.core.config import get_settings
 from app.core.database import Base, get_engine, init_database
+from app.modules.admin.service import AUDIT_EVENTS, create_audit_event, list_audit_events
+from app.modules.ai.service import AI_RUNS, get_ai_run, record_ai_run
 from app.modules.documents.repository import create_document, get_document, get_document_content, list_documents
 from app.modules.parsing.service import get_task, list_chunks, run_parse_task
 from app.modules.requirements.schemas import RequirementAnalysisRead, RequirementParseResult, RequirementRecommendation
@@ -32,6 +34,8 @@ def restore_defaults() -> None:
     settings.local_storage_root = "storage"
     settings.validation_plan_template_path = "templates/validation-plan-v1.docx"
     ANALYSES.clear()
+    AI_RUNS.clear()
+    AUDIT_EVENTS.clear()
 
 
 def test_sqlalchemy_document_repository_round_trip(tmp_path: Path) -> None:
@@ -105,6 +109,44 @@ def test_sqlalchemy_risk_repository_round_trip(tmp_path: Path) -> None:
         restore_defaults()
 
 
+def test_sqlalchemy_requirement_ai_and_audit_round_trip(tmp_path: Path) -> None:
+    configure_sqlite(tmp_path)
+    try:
+        analysis = RequirementAnalysisRead(
+            id="analysis-2",
+            project_id="project-g99-rfid",
+            description="DNBSEQ-G99 引入二供供应商康奈特 RFID",
+            parse_result=RequirementParseResult(
+                test_object="RFID",
+                change_type="供应商变更",
+                product_model="DNBSEQ-G99",
+                subsystem="RFID",
+                missing_fields=[],
+            ),
+            recommendations=[],
+            status="ready_for_review",
+            created_at=datetime.now(UTC),
+        )
+        from app.modules.requirements.service import _save_analysis, get_analysis
+
+        _save_analysis(analysis)
+        persisted_analysis = get_analysis(analysis.id)
+        assert persisted_analysis is not None
+        assert persisted_analysis.parse_result.test_object == "RFID"
+
+        ai_run = record_ai_run("validation_plan_check", {"blocking": [], "warnings": [], "suggestions": []})
+        persisted_ai_run = get_ai_run(ai_run.id)
+        assert persisted_ai_run is not None
+        assert persisted_ai_run.valid is True
+
+        audit = create_audit_event("user-admin", "publish", "document", "doc-1", "发布资料")
+        persisted_audits = list_audit_events()
+        assert persisted_audits[0].id == audit.id
+        assert persisted_audits[0].action == "publish"
+    finally:
+        restore_defaults()
+
+
 def test_sqlalchemy_validation_plan_repository_round_trip(tmp_path: Path) -> None:
     configure_sqlite(tmp_path)
     try:
@@ -132,7 +174,9 @@ def test_sqlalchemy_validation_plan_repository_round_trip(tmp_path: Path) -> Non
             status="draft",
             created_at=datetime.now(UTC),
         )
-        ANALYSES[analysis.id] = analysis
+        from app.modules.requirements.service import _save_analysis
+
+        _save_analysis(analysis)
 
         plan = create_plan(analysis.id)
         assert plan is not None

@@ -1,6 +1,11 @@
 from datetime import UTC, datetime
 from uuid import uuid4
 
+from sqlalchemy import DateTime, JSON, String, Text
+from sqlalchemy.orm import Mapped, mapped_column
+
+from app.core.config import get_settings
+from app.core.database import Base, session_scope
 from app.modules.requirements.schemas import (
     RequirementAnalysisRead,
     RequirementParseResult,
@@ -10,6 +15,18 @@ from app.modules.risks.service import list_risks
 from app.modules.test_packages.service import list_packages
 
 ANALYSES: dict[str, RequirementAnalysisRead] = {}
+
+
+class RequirementAnalysisRecord(Base):
+    __tablename__ = "requirement_analyses"
+
+    id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(120), index=True)
+    description: Mapped[str] = mapped_column(Text)
+    parse_result: Mapped[dict] = mapped_column(JSON)
+    recommendations: Mapped[list[dict]] = mapped_column(JSON)
+    status: Mapped[str] = mapped_column(String(80), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
 def create_analysis(project_id: str, description: str) -> RequirementAnalysisRead:
@@ -24,11 +41,15 @@ def create_analysis(project_id: str, description: str) -> RequirementAnalysisRea
         status="ready_for_review",
         created_at=datetime.now(UTC),
     )
-    ANALYSES[analysis.id] = analysis
+    _save_analysis(analysis)
     return analysis
 
 
 def get_analysis(analysis_id: str) -> RequirementAnalysisRead | None:
+    if _use_sqlalchemy():
+        with session_scope() as session:
+            record = session.get(RequirementAnalysisRecord, analysis_id)
+            return _record_to_analysis(record) if record is not None else None
     return ANALYSES.get(analysis_id)
 
 
@@ -87,3 +108,37 @@ def build_recommendations(project_id: str, parse_result: RequirementParseResult)
         )
 
     return recommendations
+
+
+def _use_sqlalchemy() -> bool:
+    return get_settings().repository_backend == "sqlalchemy"
+
+
+def _save_analysis(analysis: RequirementAnalysisRead) -> None:
+    if _use_sqlalchemy():
+        with session_scope() as session:
+            session.merge(
+                RequirementAnalysisRecord(
+                    id=analysis.id,
+                    project_id=analysis.project_id,
+                    description=analysis.description,
+                    parse_result=analysis.parse_result.model_dump(),
+                    recommendations=[recommendation.model_dump() for recommendation in analysis.recommendations],
+                    status=analysis.status,
+                    created_at=analysis.created_at,
+                )
+            )
+        return
+    ANALYSES[analysis.id] = analysis
+
+
+def _record_to_analysis(record: RequirementAnalysisRecord) -> RequirementAnalysisRead:
+    return RequirementAnalysisRead(
+        id=record.id,
+        project_id=record.project_id,
+        description=record.description,
+        parse_result=RequirementParseResult(**record.parse_result),
+        recommendations=[RequirementRecommendation(**recommendation) for recommendation in (record.recommendations or [])],
+        status=record.status,
+        created_at=record.created_at,
+    )

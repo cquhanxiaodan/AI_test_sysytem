@@ -36,7 +36,10 @@ def session_scope() -> Generator[Session, None, None]:
 
 def init_database() -> None:
     from app.modules.documents.repository import DocumentRecord
+    from app.modules.admin.service import AuditEventRecord
+    from app.modules.ai.service import AiRunRecordModel
     from app.modules.parsing.service import DocumentChunkRecord, ParsingTaskRecord
+    from app.modules.requirements.service import RequirementAnalysisRecord
     from app.modules.risks.service import RiskRecord
     from app.modules.test_items.service import TestItemRecord
     from app.modules.test_packages.service import TestPackageRecord
@@ -44,8 +47,11 @@ def init_database() -> None:
 
     _ = (
         DocumentRecord,
+        AuditEventRecord,
+        AiRunRecordModel,
         DocumentChunkRecord,
         ParsingTaskRecord,
+        RequirementAnalysisRecord,
         RiskRecord,
         TestItemRecord,
         TestPackageRecord,
