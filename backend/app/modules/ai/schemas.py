@@ -14,6 +14,13 @@ class AiValidationResponse(BaseModel):
     errors: list[str]
 
 
+class AiConfigRead(BaseModel):
+    provider: str
+    model: str
+    configured: bool
+    external_reference_enabled: bool
+
+
 class AiRunRecord(BaseModel):
     id: str
     task_type: str

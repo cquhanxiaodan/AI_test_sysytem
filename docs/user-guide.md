@@ -60,9 +60,33 @@ MVP 采用本地知识优先的 AI 编排方式。系统先使用统一资料池
 | 需求推荐 | 需求分析页面 | 根据变更描述推荐测试条目和风险补充测试 |
 | 验证方案检查 | 验证方案页面 | 检查方案中缺失的 DUT、参考文档、测试项和风险覆盖 |
 
+模型接入采用 OpenAI 兼容接口。未配置模型时，系统使用本地规则兜底；配置模型后，需求分析会优先调用模型抽取结构化字段。
+
+环境变量：
+
+```bash
+# 模型提供方，local 表示本地规则兜底，openai-compatible 表示启用 OpenAI 兼容接口
+AI_PROVIDER="openai-compatible"
+
+# OpenAI 兼容接口地址，例如内网模型网关
+AI_BASE_URL="https://your-model-gateway.example.com/v1"
+
+# 模型 API Key
+AI_API_KEY="CHANGE_ME"
+
+# 模型名称
+AI_MODEL="your-model-name"
+
+# 调用超时时间
+AI_TIMEOUT_SECONDS="20"
+```
+
 系统接口：
 
 ```bash
+# 查看模型接入状态
+GET /api/ai/config
+
 # 校验 AI 结构化输出
 POST /api/ai/validate
 

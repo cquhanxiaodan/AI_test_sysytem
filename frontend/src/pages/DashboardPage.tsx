@@ -1,16 +1,16 @@
 import { Card, Col, Descriptions, List, Row, Statistic, Tag, Typography } from "antd";
 import { useEffect, useState } from "react";
-import { AcceptanceStatus, fetchAcceptanceStatus, fetchSystemConfig, SystemConfig } from "../api/client";
+import { AcceptanceStatus, AiConfig, fetchAcceptanceStatus, fetchAiConfig } from "../api/client";
 import { useProjects } from "../context/ProjectContext";
 
 export default function DashboardPage() {
   const { currentProject } = useProjects();
   const [acceptance, setAcceptance] = useState<AcceptanceStatus | null>(null);
-  const [systemConfig, setSystemConfig] = useState<SystemConfig | null>(null);
+  const [aiConfig, setAiConfig] = useState<AiConfig | null>(null);
 
   useEffect(() => {
     fetchAcceptanceStatus().then(setAcceptance).catch(() => setAcceptance(null));
-    fetchSystemConfig().then(setSystemConfig).catch(() => setSystemConfig(null));
+    fetchAiConfig().then(setAiConfig).catch(() => setAiConfig(null));
   }, []);
 
   return (
@@ -49,16 +49,18 @@ export default function DashboardPage() {
           </Descriptions>
         </Card>
       )}
-      {systemConfig && (
+      {aiConfig && (
         <Card title="AI 大模型接入与调用" className="section-card">
           <Descriptions column={1} size="small">
-            <Descriptions.Item label="外部参考开关">
-              <Tag color={systemConfig.ai_external_reference_enabled ? "green" : "default"}>
-                {systemConfig.ai_external_reference_enabled ? "已开启" : "默认关闭"}
+            <Descriptions.Item label="模型接入状态">
+              <Tag color={aiConfig.configured ? "green" : "default"}>
+                {aiConfig.configured ? "已接入" : "本地规则兜底"}
               </Tag>
             </Descriptions.Item>
+            <Descriptions.Item label="模型提供方">{aiConfig.provider}</Descriptions.Item>
+            <Descriptions.Item label="模型名称">{aiConfig.model}</Descriptions.Item>
             <Descriptions.Item label="本地 AI 调用">
-              资料池标签识别、需求推荐和验证方案完整性检查会调用本地结构化 AI 编排接口。
+              需求分析优先调用 OpenAI 兼容模型抽取结构化字段；模型未配置或调用失败时自动回退本地规则。
             </Descriptions.Item>
             <Descriptions.Item label="外部模型策略">
               联网大模型仅作为受控外部参考，需脱敏、标记来源，并经人工审核后进入验证方案。

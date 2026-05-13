@@ -167,6 +167,13 @@ export type SystemConfig = {
   validation_template_version: string;
 };
 
+export type AiConfig = {
+  provider: string;
+  model: string;
+  configured: boolean;
+  external_reference_enabled: boolean;
+};
+
 export function getToken() {
   return window.localStorage.getItem(TOKEN_KEY);
 }
@@ -367,4 +374,8 @@ export async function fetchAcceptanceStatus() {
 
 export async function fetchSystemConfig() {
   return request<SystemConfig>("/api/admin/config");
+}
+
+export async function fetchAiConfig() {
+  return request<AiConfig>("/api/ai/config");
 }

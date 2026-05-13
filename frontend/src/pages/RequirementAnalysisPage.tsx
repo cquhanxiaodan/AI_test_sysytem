@@ -5,7 +5,9 @@ import { useEffect, useState } from "react";
 import {
   createRequirementAnalysis,
   downloadRequirementTemplate,
+  fetchAiConfig,
   fetchRequirementTemplate,
+  AiConfig,
   RequirementAnalysis,
   RequirementBatchUploadResult,
   RequirementTemplate,
@@ -25,10 +27,12 @@ export default function RequirementAnalysisPage() {
   const [batchResult, setBatchResult] = useState<RequirementBatchUploadResult | null>(null);
   const [batchFile, setBatchFile] = useState<File | null>(null);
   const [template, setTemplate] = useState<RequirementTemplate | null>(null);
+  const [aiConfig, setAiConfig] = useState<AiConfig | null>(null);
   const [form] = Form.useForm<{ description: string }>();
 
   useEffect(() => {
     fetchRequirementTemplate().then(setTemplate).catch(() => setTemplate(null));
+    fetchAiConfig().then(setAiConfig).catch(() => setAiConfig(null));
   }, []);
 
   async function submit(values: { description: string }) {
@@ -91,6 +95,11 @@ export default function RequirementAnalysisPage() {
       <Typography.Paragraph type="secondary">
         输入或上传新开发需求/变更需求，系统将结合测试归口包、历史方案、Jira 和 DFMEA 风险项推荐测试条目。
       </Typography.Paragraph>
+      {aiConfig && (
+        <Typography.Paragraph type="secondary">
+          AI 状态：<Tag color={aiConfig.configured ? "green" : "default"}>{aiConfig.configured ? `已接入 ${aiConfig.model}` : "本地规则兜底"}</Tag>
+        </Typography.Paragraph>
+      )}
       <Card title="标准需求格式" className="section-card">
         <Typography.Paragraph type="secondary">
           必填字段为需求标题、产品型号、变更对象、变更背景和变更内容。所属子系统、变更类型、影响范围、验收标准和已知风险为可选字段，可由系统推断或用户补充确认。

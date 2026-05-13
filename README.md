@@ -79,6 +79,20 @@ STORAGE_BACKEND="minio"
 
 单独运行后端测试时，默认代码配置仍使用内存仓库和本地文件存储，方便在没有 PostgreSQL、MinIO 或 Docker 的环境中快速验证。
 
+## AI 模型接入
+
+默认 `AI_PROVIDER="local"`，系统使用本地规则兜底。接入内网模型网关或 OpenAI 兼容服务时配置：
+
+```bash
+AI_PROVIDER="openai-compatible"
+AI_BASE_URL="https://your-model-gateway.example.com/v1"
+AI_API_KEY="CHANGE_ME"
+AI_MODEL="your-model-name"
+AI_TIMEOUT_SECONDS="20"
+```
+
+可通过 `GET /api/ai/config` 查看模型接入状态。当前需求分析会优先调用模型抽取结构化字段，调用失败时自动回退本地规则。
+
 ## 生产部署建议
 
 生产环境使用 `.env.production.example` 作为配置模板，并替换数据库密码、MinIO 账号和访问域名。

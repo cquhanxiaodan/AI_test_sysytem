@@ -26,6 +26,12 @@ class Settings(BaseSettings):
     local_storage_root: str = "storage"
     validation_plan_template_path: str = "templates/validation-plan-v1.docx"
 
+    ai_provider: str = "local"
+    ai_base_url: str = ""
+    ai_api_key: str = ""
+    ai_model: str = ""
+    ai_timeout_seconds: int = 20
+
     cors_origins: list[str] = ["http://localhost:5173"]
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")

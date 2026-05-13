@@ -59,3 +59,12 @@ def test_ai_validation_reports_missing_fields() -> None:
     assert response.status_code == 200
     assert response.json()["valid"] is False
     assert "缺少字段: confidence" in response.json()["errors"]
+
+
+def test_ai_config_reports_local_fallback_by_default() -> None:
+    response = client.get("/api/ai/config", headers=auth_headers())
+
+    assert response.status_code == 200
+    config = response.json()
+    assert config["provider"] == "local"
+    assert config["configured"] is False

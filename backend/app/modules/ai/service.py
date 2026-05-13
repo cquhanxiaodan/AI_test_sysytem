@@ -1,5 +1,7 @@
 from datetime import UTC, datetime
+import json
 from typing import Any
+from urllib import error, request
 from uuid import uuid4
 
 from sqlalchemy import Boolean, DateTime, JSON, String
@@ -7,7 +9,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.config import get_settings
 from app.core.database import Base, session_scope
-from app.modules.ai.schemas import AiRunRecord
+from app.modules.ai.schemas import AiConfigRead, AiRunRecord
 
 AI_RUNS: dict[str, AiRunRecord] = {}
 
@@ -42,12 +44,62 @@ def validate_output(task_type: str, output: dict[str, Any]) -> tuple[bool, list[
     return len(errors) == 0, errors
 
 
-def record_ai_run(task_type: str, output: dict[str, Any]) -> AiRunRecord:
+def get_ai_config() -> AiConfigRead:
+    settings = get_settings()
+    configured = settings.ai_provider == "openai-compatible" and bool(settings.ai_base_url and settings.ai_api_key and settings.ai_model)
+    return AiConfigRead(
+        provider=settings.ai_provider,
+        model=settings.ai_model or "local-rule-engine",
+        configured=configured,
+        external_reference_enabled=configured,
+    )
+
+
+def run_json_task(task_type: str, system_prompt: str, user_prompt: str) -> dict[str, Any] | None:
+    settings = get_settings()
+    if settings.ai_provider != "openai-compatible" or not (settings.ai_base_url and settings.ai_api_key and settings.ai_model):
+        return None
+    url = f"{settings.ai_base_url.rstrip('/')}/chat/completions"
+    payload = {
+        "model": settings.ai_model,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        "temperature": 0,
+        "response_format": {"type": "json_object"},
+    }
+    req = request.Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Authorization": f"Bearer {settings.ai_api_key}", "Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with request.urlopen(req, timeout=settings.ai_timeout_seconds) as response:
+            data = json.loads(response.read().decode("utf-8"))
+    except (TimeoutError, error.URLError, error.HTTPError, json.JSONDecodeError):
+        return None
+
+    content = data.get("choices", [{}])[0].get("message", {}).get("content")
+    if not isinstance(content, str):
+        return None
+    try:
+        output = json.loads(content)
+    except json.JSONDecodeError:
+        return None
+    if isinstance(output, dict):
+        record_ai_run(task_type, output, model_name=settings.ai_model)
+        return output
+    return None
+
+
+def record_ai_run(task_type: str, output: dict[str, Any], model_name: str | None = None) -> AiRunRecord:
     valid, errors = validate_output(task_type, output)
     record = AiRunRecord(
         id=f"ai-run-{uuid4()}",
         task_type=task_type,
-        model_name="local-mock",
+        model_name=model_name or get_settings().ai_model or "local-mock",
         prompt_version="v1",
         output=output,
         valid=valid,

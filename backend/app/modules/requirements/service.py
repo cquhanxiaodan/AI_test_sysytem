@@ -8,6 +8,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.config import get_settings
 from app.core.database import Base, session_scope
+from app.modules.ai.service import run_json_task
 from app.modules.requirements.schemas import (
     RequirementAnalysisRead,
     RequirementParseResult,
@@ -168,6 +169,9 @@ def get_analysis(analysis_id: str) -> RequirementAnalysisRead | None:
 
 
 def parse_requirement(description: str) -> RequirementParseResult:
+    ai_result = parse_requirement_with_ai(description)
+    if ai_result is not None:
+        return ai_result
     lowered = description.lower()
     product_model = "DNBSEQ-G99" if "g99" in lowered or "dnbseq-g99" in lowered else None
     test_object = "RFID" if "rfid" in lowered else "待确认对象"
@@ -185,6 +189,32 @@ def parse_requirement(description: str) -> RequirementParseResult:
         subsystem=subsystem,
         missing_fields=missing_fields,
     )
+
+
+def parse_requirement_with_ai(description: str) -> RequirementParseResult | None:
+    output = run_json_task(
+        "requirement_parse",
+        "你是基因测序仪测试需求分析助手。只输出 JSON，不输出解释。",
+        (
+            "从需求文本中抽取 test_object、change_type、product_model、subsystem、missing_fields。"
+            "字段含义：test_object 为变更对象，change_type 为变更类型，product_model 为产品型号，subsystem 为所属子系统。"
+            "缺失字段只允许使用 product_model、test_object、change_type、subsystem。"
+            "无法确定时使用待确认对象、待确认变更类型、待确认子系统，product_model 使用 null。"
+            f"\n需求文本：\n{description}"
+        ),
+    )
+    if output is None:
+        return None
+    try:
+        return RequirementParseResult(
+            test_object=str(output.get("test_object") or "待确认对象"),
+            change_type=str(output.get("change_type") or "待确认变更类型"),
+            product_model=output.get("product_model") if output.get("product_model") else None,
+            subsystem=str(output.get("subsystem") or "待确认子系统"),
+            missing_fields=[str(field) for field in output.get("missing_fields", []) if isinstance(field, str)],
+        )
+    except (TypeError, ValueError):
+        return None
 
 
 def parse_change_type(description: str) -> str:
