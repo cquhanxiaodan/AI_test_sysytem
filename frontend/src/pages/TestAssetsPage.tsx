@@ -170,9 +170,22 @@ export default function TestAssetsPage() {
   }
 
   async function removePackage(packageAsset: TestPackageAsset) {
-    await deleteTestPackage(packageAsset.id);
-    message.success("测试归口包已删除");
-    await loadItems();
+    Modal.confirm({
+      title: "确认删除测试归口包？",
+      content: `将删除「${packageAsset.name}」，删除后不会再用于需求推荐。`,
+      okText: "删除",
+      okButtonProps: { danger: true },
+      cancelText: "取消",
+      onOk: async () => {
+        try {
+          await deleteTestPackage(packageAsset.id);
+          message.success("测试归口包已删除");
+          await loadItems();
+        } catch (error) {
+          message.error(error instanceof Error ? error.message : "测试归口包删除失败");
+        }
+      },
+    });
   }
 
   async function publishSelectedRisks() {
@@ -202,9 +215,22 @@ export default function TestAssetsPage() {
   }
 
   async function removeRisk(risk: RiskItem) {
-    await deleteRisk(risk.id);
-    message.success("风险知识项已删除");
-    await loadItems();
+    Modal.confirm({
+      title: "确认删除风险知识项？",
+      content: `将删除「${risk.title}」，删除后不会再用于需求推荐。`,
+      okText: "删除",
+      okButtonProps: { danger: true },
+      cancelText: "取消",
+      onOk: async () => {
+        try {
+          await deleteRisk(risk.id);
+          message.success("风险知识项已删除");
+          await loadItems();
+        } catch (error) {
+          message.error(error instanceof Error ? error.message : "风险知识项删除失败");
+        }
+      },
+    });
   }
 
   async function parseRiskSource(values: { sourceType: string; content: string }) {
