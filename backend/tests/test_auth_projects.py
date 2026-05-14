@@ -75,19 +75,28 @@ def test_create_project_space_for_tester() -> None:
     assert project["document_rules"] == []
 
 
-def test_delete_project_requires_current_password() -> None:
-    token = login("tester", "tester123")
+def test_delete_project_requires_admin_and_current_password() -> None:
+    tester_token = login("tester", "tester123")
     created = client.post(
         "/api/projects",
-        headers={"Authorization": f"Bearer {token}"},
+        headers={"Authorization": f"Bearer {tester_token}"},
         json={"code": "TEST-DELETE", "name": "待删除项目空间"},
     )
     project_id = created.json()["id"]
 
+    forbidden = client.request(
+        "DELETE",
+        f"/api/projects/{project_id}",
+        headers={"Authorization": f"Bearer {tester_token}"},
+        json={"password": "tester123"},
+    )
+    assert forbidden.status_code == 403
+
+    admin_token = login("admin", "admin123")
     rejected = client.request(
         "DELETE",
         f"/api/projects/{project_id}",
-        headers={"Authorization": f"Bearer {token}"},
+        headers={"Authorization": f"Bearer {admin_token}"},
         json={"password": "bad-password"},
     )
     assert rejected.status_code == 403
@@ -95,8 +104,8 @@ def test_delete_project_requires_current_password() -> None:
     deleted = client.request(
         "DELETE",
         f"/api/projects/{project_id}",
-        headers={"Authorization": f"Bearer {token}"},
-        json={"password": "tester123"},
+        headers={"Authorization": f"Bearer {admin_token}"},
+        json={"password": "admin123"},
     )
     assert deleted.status_code == 204
 

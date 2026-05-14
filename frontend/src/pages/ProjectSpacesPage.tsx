@@ -1,15 +1,18 @@
 import { Button, Card, Form, Input, Modal, Space, Table, Tag, Typography, message } from "antd";
 import { useState } from "react";
 import { createProject, deleteProject, Project, ProjectCreatePayload } from "../api/client";
+import { useAuth } from "../context/AuthContext";
 import { useProjects } from "../context/ProjectContext";
 
 export default function ProjectSpacesPage() {
+  const { user } = useAuth();
   const { projects, currentProject, reloadProjects, selectProject } = useProjects();
   const [form] = Form.useForm<ProjectCreatePayload>();
   const [deleteForm] = Form.useForm<{ password: string }>();
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [targetProject, setTargetProject] = useState<Project | null>(null);
+  const canDeleteProject = user?.roles.includes("admin") ?? false;
 
   function submit(values: ProjectCreatePayload) {
     setCreating(true);
@@ -41,7 +44,7 @@ export default function ProjectSpacesPage() {
     <section>
       <Typography.Title level={2}>项目空间</Typography.Title>
       <Typography.Paragraph type="secondary">
-        创建和选择项目空间。项目空间通常对应某个产品项目的综合变更，例如 G99 ECR4.0，用于隔离资料、测试资产、风险知识和验证方案上下文。
+        创建和选择项目空间。项目空间通常对应某个产品项目的综合变更，例如 G99 ECR4.0，用于隔离资料、测试资产、风险知识和验证方案上下文。删除项目空间仅管理员可操作。
       </Typography.Paragraph>
 
       <Card title="创建项目空间" className="section-card">
@@ -76,7 +79,7 @@ export default function ProjectSpacesPage() {
                   <Button type={currentProject?.id === project.id ? "primary" : "default"} onClick={() => selectProject(project.id)}>
                     {currentProject?.id === project.id ? "当前项目" : "切换到此项目"}
                   </Button>
-                  <Button danger onClick={() => setTargetProject(project)}>删除</Button>
+                  {canDeleteProject && <Button danger onClick={() => setTargetProject(project)}>删除</Button>}
                 </Space>
               ),
             },

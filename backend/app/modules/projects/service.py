@@ -48,8 +48,7 @@ def delete_project_for_user(project_id: str, user: SeedUser, password: str) -> b
     project = PROJECTS.get(project_id)
     if project is None:
         return None
-    role = project.members.get(user.id)
-    if role != "owner" and "admin" not in user.roles:
+    if "admin" not in user.roles:
         return False
     if user.password != password:
         return False
