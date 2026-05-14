@@ -1,11 +1,17 @@
 from pydantic import BaseModel
 
 
+class FreeChatMessage(BaseModel):
+    role: str
+    content: str
+
+
 class FreeChatRequest(BaseModel):
     project_id: str
     question: str
     use_project_knowledge: bool = True
     use_external_model: bool = True
+    messages: list[FreeChatMessage] = []
 
 
 class FreeChatSource(BaseModel):

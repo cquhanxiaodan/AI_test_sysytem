@@ -133,3 +133,32 @@ def test_free_chat_returns_local_knowledge_answer() -> None:
     assert result["used_model"] is False
     assert result["sources"]
     assert "RFID" in result["answer"]
+
+
+def test_free_chat_uses_conversation_history_for_follow_up() -> None:
+    headers = auth_headers()
+    client.post(
+        "/api/risks/parse",
+        headers=headers,
+        json={"project_id": "project-g99-rfid", "source_type": "jira", "content": "title\nRFID读取失败\n"},
+    )
+
+    response = client.post(
+        "/api/free-chat/ask",
+        headers=headers,
+        json={
+            "project_id": "project-g99-rfid",
+            "question": "这些风险要怎么验证",
+            "use_project_knowledge": True,
+            "use_external_model": False,
+            "messages": [
+                {"role": "user", "content": "RFID 读取有什么风险"},
+                {"role": "assistant", "content": "资料库命中 RFID 读取失败风险"},
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    result = response.json()
+    assert result["sources"]
+    assert "结合当前对话上下文" in result["answer"]

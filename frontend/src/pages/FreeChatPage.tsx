@@ -1,6 +1,6 @@
-import { Button, Card, Form, Input, List, Switch, Tag, Typography, message } from "antd";
+import { Button, Card, Form, Input, List, Space, Switch, Tag, Typography, message } from "antd";
 import { useState } from "react";
-import { askFreeChat, FreeChatResponse } from "../api/client";
+import { askFreeChat, FreeChatMessage, FreeChatResponse } from "../api/client";
 import { useProjects } from "../context/ProjectContext";
 
 type ChatForm = {
@@ -13,14 +13,26 @@ export default function FreeChatPage() {
   const { currentProject } = useProjects();
   const [form] = Form.useForm<ChatForm>();
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<FreeChatResponse | null>(null);
+  const [messages, setMessages] = useState<Array<FreeChatMessage & { used_model?: boolean; sources?: FreeChatResponse["sources"] }>>([]);
 
   function submit(values: ChatForm) {
     if (!currentProject) return;
+    const history = messages.map((item) => ({ role: item.role, content: item.content }));
+    const userMessage: FreeChatMessage = { role: "user", content: values.question };
+    setMessages((current) => [...current, userMessage]);
     setLoading(true);
-    askFreeChat(currentProject.id, values.question, values.use_project_knowledge, values.use_external_model)
-      .then(setResult)
-      .catch((error: Error) => message.error(`提问失败：${error.message}`))
+    askFreeChat(currentProject.id, values.question, values.use_project_knowledge, values.use_external_model, history)
+      .then((result) => {
+        setMessages((current) => [
+          ...current,
+          { role: "assistant", content: result.answer, used_model: result.used_model, sources: result.sources },
+        ]);
+        form.setFieldsValue({ question: "" });
+      })
+      .catch((error: Error) => {
+        setMessages((current) => current.slice(0, -1));
+        message.error(`提问失败：${error.message}`);
+      })
       .finally(() => setLoading(false));
   }
 
@@ -28,12 +40,52 @@ export default function FreeChatPage() {
     <section>
       <Typography.Title level={2}>自由应用</Typography.Title>
       <Typography.Paragraph type="secondary">
-        面向当前项目空间自由提问。系统会优先检索已上传并沉淀的资料库，再结合已配置的大模型生成回答。
+        面向当前项目空间连续对话式提问。系统会结合当前会话上下文，优先检索已上传并沉淀的资料库，再结合已配置的大模型生成回答。
       </Typography.Paragraph>
-      <Card title="自由提问" className="section-card">
+      <Card
+        title="当前对话"
+        className="section-card"
+        extra={<Button onClick={() => setMessages([])} disabled={messages.length === 0}>清空对话</Button>}
+      >
+        {messages.length === 0 ? (
+          <Typography.Paragraph type="secondary">当前还没有对话。输入问题后可连续追问，系统会带上本轮会话上下文。</Typography.Paragraph>
+        ) : (
+          <List
+            dataSource={messages}
+            renderItem={(item, index) => (
+              <List.Item>
+                <List.Item.Meta
+                  title={
+                    <Space>
+                      <Tag color={item.role === "user" ? "blue" : item.used_model ? "green" : "default"}>
+                        {item.role === "user" ? "我" : item.used_model ? "大模型回答" : "本地资料命中"}
+                      </Tag>
+                      <span>第 {index + 1} 条</span>
+                    </Space>
+                  }
+                  description={<Typography.Paragraph style={{ whiteSpace: "pre-wrap" }}>{item.content}</Typography.Paragraph>}
+                />
+                {item.sources && item.sources.length > 0 && (
+                  <List
+                    size="small"
+                    header="引用来源"
+                    dataSource={item.sources}
+                    renderItem={(source) => (
+                      <List.Item>
+                        <List.Item.Meta title={`[${source.source_type}] ${source.title}`} description={source.text} />
+                      </List.Item>
+                    )}
+                  />
+                )}
+              </List.Item>
+            )}
+          />
+        )}
+      </Card>
+      <Card title="继续提问" className="section-card">
         <Form form={form} layout="vertical" onFinish={submit} initialValues={{ use_project_knowledge: true, use_external_model: true }}>
-          <Form.Item name="question" label="问题" rules={[{ required: true, message: "请输入问题" }]}>
-            <Input.TextArea rows={4} placeholder="例如：G99 ECR4.0 需要重点关注哪些历史风险和回归测试？" />
+          <Form.Item name="question" label="问题" rules={[{ required: true, message: "请输入问题" }]}> 
+            <Input.TextArea rows={4} placeholder="例如：G99 ECR4.0 需要重点关注哪些历史风险和回归测试？也可以继续追问：这些风险里哪些要进入验证方案？" />
           </Form.Item>
           <Form.Item name="use_project_knowledge" label="使用当前项目资料库" valuePropName="checked">
             <Switch />
@@ -44,22 +96,6 @@ export default function FreeChatPage() {
           <Button type="primary" htmlType="submit" loading={loading}>提交问题</Button>
         </Form>
       </Card>
-      {result && (
-        <Card title="回答" className="section-card">
-          <Tag color={result.used_model ? "green" : "default"}>{result.used_model ? "大模型回答" : "本地资料命中"}</Tag>
-          <Typography.Paragraph className="section-card" style={{ whiteSpace: "pre-wrap" }}>{result.answer}</Typography.Paragraph>
-          <List
-            size="small"
-            header="引用来源"
-            dataSource={result.sources}
-            renderItem={(source) => (
-              <List.Item>
-                <List.Item.Meta title={`[${source.source_type}] ${source.title}`} description={source.text} />
-              </List.Item>
-            )}
-          />
-        </Card>
-      )}
     </section>
   );
 }

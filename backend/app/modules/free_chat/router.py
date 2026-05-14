@@ -13,4 +13,10 @@ router = APIRouter(prefix="/free-chat", tags=["free-chat"])
 def ask(payload: FreeChatRequest, current_user: SeedUser = Depends(get_current_user)) -> FreeChatResponse:
     if get_project_for_user(payload.project_id, current_user) is None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Project access denied")
-    return answer_free_chat(payload.project_id, payload.question, payload.use_project_knowledge, payload.use_external_model)
+    return answer_free_chat(
+        payload.project_id,
+        payload.question,
+        payload.use_project_knowledge,
+        payload.use_external_model,
+        payload.messages,
+    )

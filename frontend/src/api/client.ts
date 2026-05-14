@@ -244,6 +244,11 @@ export type FreeChatResponse = {
   sources: Array<{ source_type: string; source_id: string; title: string; text: string; score: number }>;
 };
 
+export type FreeChatMessage = {
+  role: "user" | "assistant";
+  content: string;
+};
+
 export function getToken() {
   return window.localStorage.getItem(TOKEN_KEY);
 }
@@ -555,7 +560,13 @@ export async function updateAiConfig(config: AiConfigUpdate) {
   });
 }
 
-export async function askFreeChat(projectId: string, question: string, useProjectKnowledge: boolean, useExternalModel: boolean) {
+export async function askFreeChat(
+  projectId: string,
+  question: string,
+  useProjectKnowledge: boolean,
+  useExternalModel: boolean,
+  messages: FreeChatMessage[] = [],
+) {
   return request<FreeChatResponse>("/api/free-chat/ask", {
     method: "POST",
     body: JSON.stringify({
@@ -563,6 +574,7 @@ export async function askFreeChat(projectId: string, question: string, useProjec
       question,
       use_project_knowledge: useProjectKnowledge,
       use_external_model: useExternalModel,
+      messages,
     }),
   });
 }
