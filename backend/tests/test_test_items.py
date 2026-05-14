@@ -203,6 +203,26 @@ def test_bulk_delete_test_items() -> None:
     assert not set(item_ids) & {item["id"] for item in remaining.json()}
 
 
+def test_bulk_publish_test_items() -> None:
+    headers = auth_headers()
+    upload = client.post(
+        "/api/documents/upload",
+        headers=headers,
+        data={"project_id": "project-g99-rfid"},
+        files={"file": ("RFID验证方案.txt", b"RFID", "text/plain")},
+    )
+    split = client.post(f"/api/test-items/split/{upload.json()['document']['id']}", headers=headers)
+    item_ids = [item["id"] for item in split.json()["items"][:2]]
+
+    response = client.post("/api/test-items/bulk-publish", headers=headers, json={"item_ids": item_ids})
+
+    assert response.status_code == 200
+    assert set(response.json()["published_ids"]) == set(item_ids)
+    remaining = client.get("/api/test-items", headers=headers)
+    statuses = {item["id"]: item["status"] for item in remaining.json()}
+    assert {statuses[item_id] for item_id in item_ids} == {"published"}
+
+
 def test_split_document_uses_ai_items(monkeypatch) -> None:
     headers = auth_headers()
     upload = client.post(

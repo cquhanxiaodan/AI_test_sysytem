@@ -48,6 +48,15 @@ class TestItemBulkDeleteResponse(BaseModel):
     skipped: list[dict[str, str]]
 
 
+class TestItemBulkPublishRequest(BaseModel):
+    item_ids: list[str]
+
+
+class TestItemBulkPublishResponse(BaseModel):
+    published_ids: list[str]
+    skipped: list[dict[str, str]]
+
+
 class SplitResult(BaseModel):
     document_id: str
     items: list[TestItemAsset]

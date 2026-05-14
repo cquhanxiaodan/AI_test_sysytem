@@ -3,6 +3,7 @@ import type { ColumnsType } from "antd/es/table";
 import { useEffect, useState } from "react";
 import {
   bulkDeleteTestItems,
+  bulkPublishTestItems,
   confirmTestItem,
   fetchSystemConfig,
   fetchDocuments,
@@ -75,6 +76,19 @@ export default function TestAssetsPage() {
     }
     if (result.skipped.length > 0) {
       message.warning(`有 ${result.skipped.length} 个测试条目未删除`);
+    }
+    await loadItems();
+  }
+
+  async function publishSelectedItems() {
+    if (selectedItemIds.length === 0) return;
+    const result = await bulkPublishTestItems(selectedItemIds.map(String));
+    setSelectedItemIds([]);
+    if (result.published_ids.length > 0) {
+      message.success(`已发布 ${result.published_ids.length} 个测试条目`);
+    }
+    if (result.skipped.length > 0) {
+      message.warning(`有 ${result.skipped.length} 个测试条目未发布`);
     }
     await loadItems();
   }
@@ -201,7 +215,10 @@ export default function TestAssetsPage() {
                   <Typography.Paragraph type="secondary">
                     测试条目来自全局共享资产库，所有项目空间均可查看全部条目。资料池中的验证方案、测试规范、测试报告在管理员发布后会自动拆分；维护工具可对已上传资料重新补拆。
                   </Typography.Paragraph>
-                  <Button danger disabled={selectedItemIds.length === 0} onClick={deleteSelectedItems}>删除选中测试条目</Button>
+                  <Space>
+                    <Button type="primary" disabled={selectedItemIds.length === 0} onClick={publishSelectedItems}>发布选中测试条目</Button>
+                    <Button danger disabled={selectedItemIds.length === 0} onClick={deleteSelectedItems}>删除选中测试条目</Button>
+                  </Space>
                   <Table
                     rowKey="id"
                     loading={loading}

@@ -108,6 +108,11 @@ export type TestItemBulkDeleteResult = {
   skipped: Array<{ item_id: string; reason: string }>;
 };
 
+export type TestItemBulkPublishResult = {
+  published_ids: string[];
+  skipped: Array<{ item_id: string; reason: string }>;
+};
+
 export type TestPackageAsset = {
   id: string;
   project_id: string;
@@ -461,6 +466,13 @@ export async function updateTestItem(itemId: string, payload: TestItemUpdate) {
 
 export async function bulkDeleteTestItems(itemIds: string[]) {
   return request<TestItemBulkDeleteResult>("/api/test-items/bulk-delete", {
+    method: "POST",
+    body: JSON.stringify({ item_ids: itemIds }),
+  });
+}
+
+export async function bulkPublishTestItems(itemIds: string[]) {
+  return request<TestItemBulkPublishResult>("/api/test-items/bulk-publish", {
     method: "POST",
     body: JSON.stringify({ item_ids: itemIds }),
   });
