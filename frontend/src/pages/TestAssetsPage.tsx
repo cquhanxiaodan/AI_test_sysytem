@@ -4,7 +4,11 @@ import { useEffect, useState } from "react";
 import {
   bulkDeleteTestItems,
   bulkPublishTestItems,
+  bulkPublishTestPackages,
+  bulkPublishRisks,
   confirmTestItem,
+  deleteRisk,
+  deleteTestPackage,
   fetchSystemConfig,
   fetchDocuments,
   fetchTestItems,
@@ -19,8 +23,12 @@ import {
   DocumentItem,
   TestItemAsset,
   TestPackageAsset,
+  TestPackageUpdate,
   TestItemUpdate,
+  RiskUpdate,
   updateTestItem,
+  updateTestPackage,
+  updateRisk,
 } from "../api/client";
 import { useProjects } from "../context/ProjectContext";
 
@@ -31,11 +39,17 @@ export default function TestAssetsPage() {
   const [risks, setRisks] = useState<RiskItem[]>([]);
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
   const [selectedItemIds, setSelectedItemIds] = useState<React.Key[]>([]);
+  const [selectedPackageIds, setSelectedPackageIds] = useState<React.Key[]>([]);
+  const [selectedRiskIds, setSelectedRiskIds] = useState<React.Key[]>([]);
   const [systemConfig, setSystemConfig] = useState<SystemConfig | null>(null);
   const [editingItem, setEditingItem] = useState<TestItemAsset | null>(null);
+  const [editingPackage, setEditingPackage] = useState<TestPackageAsset | null>(null);
+  const [editingRisk, setEditingRisk] = useState<RiskItem | null>(null);
   const [loading, setLoading] = useState(false);
   const [form] = Form.useForm<{ documentId: string }>();
   const [editForm] = Form.useForm<TestItemUpdate>();
+  const [packageForm] = Form.useForm<TestPackageUpdate & { items_text?: string }>();
+  const [riskForm] = Form.useForm<RiskUpdate>();
 
   async function loadItems() {
     setLoading(true);
@@ -124,6 +138,75 @@ export default function TestAssetsPage() {
     await loadItems();
   }
 
+  async function publishSelectedPackages() {
+    if (selectedPackageIds.length === 0) return;
+    const result = await bulkPublishTestPackages(selectedPackageIds.map(String));
+    setSelectedPackageIds([]);
+    if (result.published_ids.length > 0) {
+      message.success(`已发布 ${result.published_ids.length} 个测试归口包`);
+    }
+    if (result.skipped.length > 0) {
+      message.warning(`有 ${result.skipped.length} 个测试归口包未发布`);
+    }
+    await loadItems();
+  }
+
+  function openEditPackage(packageAsset: TestPackageAsset) {
+    setEditingPackage(packageAsset);
+    packageForm.setFieldsValue({ ...packageAsset, items_text: JSON.stringify(packageAsset.items, null, 2) });
+  }
+
+  async function saveEditingPackage() {
+    if (!editingPackage) return;
+    const values = packageForm.getFieldsValue();
+    let parsedItems = editingPackage.items;
+    if (values.items_text) {
+      parsedItems = JSON.parse(values.items_text);
+    }
+    await updateTestPackage(editingPackage.id, { ...values, items: parsedItems });
+    message.success("测试归口包已更新");
+    setEditingPackage(null);
+    await loadItems();
+  }
+
+  async function removePackage(packageAsset: TestPackageAsset) {
+    await deleteTestPackage(packageAsset.id);
+    message.success("测试归口包已删除");
+    await loadItems();
+  }
+
+  async function publishSelectedRisks() {
+    if (selectedRiskIds.length === 0) return;
+    const result = await bulkPublishRisks(selectedRiskIds.map(String));
+    setSelectedRiskIds([]);
+    if (result.published_ids.length > 0) {
+      message.success(`已发布 ${result.published_ids.length} 个风险知识项`);
+    }
+    if (result.skipped.length > 0) {
+      message.warning(`有 ${result.skipped.length} 个风险知识项未发布`);
+    }
+    await loadItems();
+  }
+
+  function openEditRisk(risk: RiskItem) {
+    setEditingRisk(risk);
+    riskForm.setFieldsValue(risk);
+  }
+
+  async function saveEditingRisk() {
+    if (!editingRisk) return;
+    await updateRisk(editingRisk.id, riskForm.getFieldsValue());
+    message.success("风险知识项已更新");
+    setEditingRisk(null);
+    await loadItems();
+  }
+
+  async function removeRisk(risk: RiskItem) {
+    await deleteRisk(risk.id);
+    message.success("风险知识项已删除");
+    await loadItems();
+  }
+
   async function parseRiskSource(values: { sourceType: string; content: string }) {
     if (!currentProject) return;
     const result = await parseRisks(currentProject.id, values.sourceType, values.content);
@@ -162,9 +245,13 @@ export default function TestAssetsPage() {
     {
       title: "操作",
       render: (_, packageAsset) => (
-        <Button size="small" type="primary" disabled={packageAsset.status === "published"} onClick={() => publishPackage(packageAsset)}>
-          发布
-        </Button>
+        <Space>
+          <Button size="small" onClick={() => openEditPackage(packageAsset)}>编辑</Button>
+          <Button size="small" type="primary" disabled={packageAsset.status === "published"} onClick={() => publishPackage(packageAsset)}>
+            发布
+          </Button>
+          <Button size="small" danger onClick={() => removePackage(packageAsset)}>删除</Button>
+        </Space>
       ),
     },
   ];
@@ -176,6 +263,15 @@ export default function TestAssetsPage() {
     { title: "子系统", dataIndex: "subsystem" },
     { title: "RPN", dataIndex: "rpn", render: (value) => value ?? "-" },
     { title: "建议测试", dataIndex: "suggested_test" },
+    {
+      title: "操作",
+      render: (_, risk) => (
+        <Space>
+          <Button size="small" onClick={() => openEditRisk(risk)}>编辑</Button>
+          <Button size="small" danger onClick={() => removeRisk(risk)}>删除</Button>
+        </Space>
+      ),
+    },
   ];
 
   function renderItemDetails(item: TestItemAsset) {
@@ -239,7 +335,15 @@ export default function TestAssetsPage() {
                   <Typography.Paragraph type="secondary">
                     归口包由测试条目自动归并生成，作为全局共享资产用于需求分析阶段推荐必测、建议和条件触发测试。
                   </Typography.Paragraph>
-                  <Table rowKey="id" loading={loading} columns={packageColumns} dataSource={packages} pagination={false} />
+                  <Button type="primary" disabled={selectedPackageIds.length === 0} onClick={publishSelectedPackages}>发布选中测试归口包</Button>
+                  <Table
+                    rowKey="id"
+                    loading={loading}
+                    columns={packageColumns}
+                    dataSource={packages}
+                    pagination={false}
+                    rowSelection={{ selectedRowKeys: selectedPackageIds, onChange: setSelectedPackageIds }}
+                  />
                 </Space>
               ),
             },
@@ -251,7 +355,15 @@ export default function TestAssetsPage() {
                   <Typography.Paragraph type="secondary">
                     风险知识源来自统一资料池中已发布的 Jira 导出和 DFMEA 文件，所有项目空间均可查看全部风险知识项。
                   </Typography.Paragraph>
-                  <Table rowKey="id" loading={loading} columns={riskColumns} dataSource={risks} pagination={false} />
+                  <Button type="primary" disabled={selectedRiskIds.length === 0} onClick={publishSelectedRisks}>发布选中风险知识项</Button>
+                  <Table
+                    rowKey="id"
+                    loading={loading}
+                    columns={riskColumns}
+                    dataSource={risks}
+                    pagination={false}
+                    rowSelection={{ selectedRowKeys: selectedRiskIds, onChange: setSelectedRiskIds }}
+                  />
                 </Space>
               ),
             },
@@ -347,6 +459,37 @@ export default function TestAssetsPage() {
           <Form.Item label="记录模板" name="record_template">
             <Input.TextArea rows={2} />
           </Form.Item>
+        </Form>
+      </Modal>
+      <Modal title="编辑测试归口包" open={Boolean(editingPackage)} onCancel={() => setEditingPackage(null)} onOk={saveEditingPackage} width={760}>
+        <Form form={packageForm} layout="vertical">
+          <Form.Item label="归口包名称" name="name"><Input /></Form.Item>
+          <Form.Item label="包类型" name="package_type"><Input /></Form.Item>
+          <Form.Item label="测试对象" name="test_object"><Input /></Form.Item>
+          <Form.Item label="变更类型" name="change_type"><Select showSearch options={(systemConfig?.change_types ?? []).map((value) => ({ label: value, value }))} /></Form.Item>
+          <Form.Item label="适用范围" name="applicable_scope"><Input.TextArea rows={2} /></Form.Item>
+          <Form.Item label="推荐级别" name="recommendation_level"><Select options={["high", "medium", "low"].map((value) => ({ label: value, value }))} /></Form.Item>
+          <Form.Item label="归口条目 JSON" name="items_text"><Input.TextArea rows={8} /></Form.Item>
+          <Form.Item label="依据" name="evidence"><Input.TextArea rows={2} /></Form.Item>
+        </Form>
+      </Modal>
+      <Modal title="编辑风险知识项" open={Boolean(editingRisk)} onCancel={() => setEditingRisk(null)} onOk={saveEditingRisk} width={760}>
+        <Form form={riskForm} layout="vertical">
+          <Form.Item label="风险标题" name="title"><Input /></Form.Item>
+          <Form.Item label="来源类型" name="source_type"><Select options={[{ label: "Jira", value: "jira" }, { label: "DFMEA", value: "dfmea" }]} /></Form.Item>
+          <Form.Item label="来源编号" name="source_id"><Input /></Form.Item>
+          <Form.Item label="描述" name="description"><Input.TextArea rows={3} /></Form.Item>
+          <Form.Item label="产品型号" name="product_model"><Input /></Form.Item>
+          <Form.Item label="测试对象" name="test_object"><Input /></Form.Item>
+          <Form.Item label="子系统" name="subsystem"><Select showSearch options={(systemConfig?.subsystem_catalog ?? []).map((value) => ({ label: value, value }))} /></Form.Item>
+          <Form.Item label="严重度" name="severity"><Input /></Form.Item>
+          <Form.Item label="RPN" name="rpn"><Input type="number" /></Form.Item>
+          <Form.Item label="失效模式" name="failure_mode"><Input /></Form.Item>
+          <Form.Item label="失效后果" name="failure_effect"><Input.TextArea rows={2} /></Form.Item>
+          <Form.Item label="根因" name="root_cause"><Input.TextArea rows={2} /></Form.Item>
+          <Form.Item label="控制措施" name="control_measure"><Input.TextArea rows={2} /></Form.Item>
+          <Form.Item label="建议测试" name="suggested_test"><Input.TextArea rows={2} /></Form.Item>
+          <Form.Item label="状态" name="status"><Input /></Form.Item>
         </Form>
       </Modal>
     </section>

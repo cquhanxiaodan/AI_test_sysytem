@@ -23,3 +23,23 @@ class TestPackageAsset(BaseModel):
     status: str
     evidence: str
     created_at: datetime
+
+
+class TestPackageUpdate(BaseModel):
+    name: str | None = None
+    package_type: str | None = None
+    test_object: str | None = None
+    change_type: str | None = None
+    applicable_scope: str | None = None
+    items: list[TestPackageItem] | None = None
+    recommendation_level: str | None = None
+    evidence: str | None = None
+
+
+class TestPackageBulkPublishRequest(BaseModel):
+    package_ids: list[str]
+
+
+class TestPackageBulkPublishResponse(BaseModel):
+    published_ids: list[str]
+    skipped: list[dict[str, str]]

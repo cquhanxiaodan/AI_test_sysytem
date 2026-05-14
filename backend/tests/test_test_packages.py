@@ -63,3 +63,59 @@ def test_publish_test_package() -> None:
 
     assert response.status_code == 200
     assert response.json()["status"] == "published"
+
+
+def test_update_test_package_returns_to_draft() -> None:
+    headers = auth_headers()
+    seed_rfid_items(headers)
+    package = client.post(
+        "/api/test-packages/generate-rfid-supplier-change?project_id=project-g99-rfid",
+        headers=headers,
+    ).json()
+    client.post(f"/api/test-packages/{package['id']}/publish", headers=headers)
+
+    response = client.patch(
+        f"/api/test-packages/{package['id']}",
+        headers=headers,
+        json={"name": "RFID 供应商变更验证包 V2", "recommendation_level": "medium"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["name"] == "RFID 供应商变更验证包 V2"
+    assert response.json()["recommendation_level"] == "medium"
+    assert response.json()["status"] == "draft"
+
+
+def test_delete_test_package() -> None:
+    headers = auth_headers()
+    seed_rfid_items(headers)
+    package = client.post(
+        "/api/test-packages/generate-rfid-supplier-change?project_id=project-g99-rfid",
+        headers=headers,
+    ).json()
+
+    response = client.delete(f"/api/test-packages/{package['id']}", headers=headers)
+
+    assert response.status_code == 200
+    assert response.json()["deleted_id"] == package["id"]
+    assert client.get("/api/test-packages", headers=headers).json() == []
+
+
+def test_bulk_publish_test_packages() -> None:
+    headers = auth_headers()
+    seed_rfid_items(headers)
+    first = client.post(
+        "/api/test-packages/generate-rfid-supplier-change?project_id=project-g99-rfid",
+        headers=headers,
+    ).json()
+    second = client.post(
+        "/api/test-packages/generate-rfid-supplier-change?project_id=project-g99-rfid",
+        headers=headers,
+    ).json()
+
+    response = client.post("/api/test-packages/bulk-publish", headers=headers, json={"package_ids": [first["id"], second["id"]]})
+
+    assert response.status_code == 200
+    assert set(response.json()["published_ids"]) == {first["id"], second["id"]}
+    statuses = {package["id"]: package["status"] for package in client.get("/api/test-packages", headers=headers).json()}
+    assert {statuses[first["id"]], statuses[second["id"]]} == {"published"}

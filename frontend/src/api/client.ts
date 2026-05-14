@@ -128,6 +128,16 @@ export type TestPackageAsset = {
   created_at: string;
 };
 
+export type TestPackageUpdate = Partial<Pick<
+  TestPackageAsset,
+  "name" | "package_type" | "test_object" | "change_type" | "applicable_scope" | "items" | "recommendation_level" | "evidence"
+>>;
+
+export type TestPackageBulkPublishResult = {
+  published_ids: string[];
+  skipped: Array<{ package_id: string; reason: string }>;
+};
+
 export type RiskItem = {
   id: string;
   project_id: string;
@@ -147,6 +157,13 @@ export type RiskItem = {
   suggested_test: string;
   status: string;
   created_at: string;
+};
+
+export type RiskUpdate = Partial<Omit<RiskItem, "id" | "project_id" | "created_at">>;
+
+export type RiskBulkPublishResult = {
+  published_ids: string[];
+  skipped: Array<{ risk_id: string; reason: string }>;
 };
 
 export type RequirementAnalysis = {
@@ -493,6 +510,24 @@ export async function publishTestPackage(packageId: string) {
   return request<TestPackageAsset>(`/api/test-packages/${packageId}/publish`, { method: "POST" });
 }
 
+export async function updateTestPackage(packageId: string, payload: TestPackageUpdate) {
+  return request<TestPackageAsset>(`/api/test-packages/${packageId}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteTestPackage(packageId: string) {
+  return request<{ deleted_id: string }>(`/api/test-packages/${packageId}`, { method: "DELETE" });
+}
+
+export async function bulkPublishTestPackages(packageIds: string[]) {
+  return request<TestPackageBulkPublishResult>("/api/test-packages/bulk-publish", {
+    method: "POST",
+    body: JSON.stringify({ package_ids: packageIds }),
+  });
+}
+
 export async function fetchRisks(projectId?: string) {
   const query = projectId ? `?project_id=${encodeURIComponent(projectId)}` : "";
   return request<RiskItem[]>(`/api/risks${query}`);
@@ -502,6 +537,24 @@ export async function parseRisks(projectId: string, sourceType: string, content:
   return request<{ items: RiskItem[] }>("/api/risks/parse", {
     method: "POST",
     body: JSON.stringify({ project_id: projectId, source_type: sourceType, content }),
+  });
+}
+
+export async function updateRisk(riskId: string, payload: RiskUpdate) {
+  return request<RiskItem>(`/api/risks/${riskId}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteRisk(riskId: string) {
+  return request<{ deleted_id: string }>(`/api/risks/${riskId}`, { method: "DELETE" });
+}
+
+export async function bulkPublishRisks(riskIds: string[]) {
+  return request<RiskBulkPublishResult>("/api/risks/bulk-publish", {
+    method: "POST",
+    body: JSON.stringify({ risk_ids: riskIds }),
   });
 }
 

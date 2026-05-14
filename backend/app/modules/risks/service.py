@@ -3,13 +3,13 @@ from datetime import UTC, datetime
 from io import StringIO
 from uuid import uuid4
 
-from sqlalchemy import DateTime, Integer, String, Text, select
+from sqlalchemy import DateTime, Integer, String, Text, delete, select
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.config import get_settings
 from app.core.database import Base, session_scope
 from app.modules.ai.service import run_json_task
-from app.modules.risks.schemas import RiskItem
+from app.modules.risks.schemas import RiskItem, RiskUpdate
 
 RISKS: dict[str, RiskItem] = {}
 
@@ -75,7 +75,7 @@ def parse_risks(project_id: str, source_type: str, content: str) -> list[RiskIte
         rows = [{"title": line.strip()} for line in content.splitlines() if line.strip()]
     parser = build_jira_risk if source_type.lower() == "jira" else build_dfmea_risk
     items = [parser(project_id, row) for row in rows]
-    items = parse_risks_with_ai(project_id, source_type, content, items) or items
+    items = enrich_risks_with_ai(project_id, source_type, content, items)
     for item in items:
         _save_risk(item)
     return items
@@ -127,6 +127,87 @@ def parse_risks_with_ai(project_id: str, source_type: str, content: str, fallbac
         except (TypeError, ValueError):
             continue
     return items or None
+
+
+def enrich_risks_with_ai(project_id: str, source_type: str, content: str, fallback_items: list[RiskItem]) -> list[RiskItem]:
+    ai_items = parse_risks_with_ai(project_id, source_type, content, fallback_items)
+    if not ai_items:
+        return fallback_items
+    enriched: list[RiskItem] = []
+    used_ai_ids: set[str] = set()
+    for fallback in fallback_items:
+        match = find_matching_ai_risk(fallback, ai_items)
+        if match is None:
+            enriched.append(fallback)
+            continue
+        used_ai_ids.add(match.id)
+        enriched.append(
+            fallback.model_copy(
+                update={
+                    "description": match.description or fallback.description,
+                    "product_model": match.product_model or fallback.product_model,
+                    "test_object": match.test_object if match.test_object != "待确认对象" else fallback.test_object,
+                    "subsystem": match.subsystem if match.subsystem != "待确认子系统" else fallback.subsystem,
+                    "severity": match.severity or fallback.severity,
+                    "rpn": match.rpn if match.rpn is not None else fallback.rpn,
+                    "failure_mode": match.failure_mode or fallback.failure_mode,
+                    "failure_effect": match.failure_effect or fallback.failure_effect,
+                    "root_cause": match.root_cause or fallback.root_cause,
+                    "control_measure": match.control_measure or fallback.control_measure,
+                    "suggested_test": match.suggested_test or fallback.suggested_test,
+                }
+            )
+        )
+    enriched.extend(item for item in ai_items if item.id not in used_ai_ids and not has_equivalent_risk(item, enriched))
+    return enriched
+
+
+def find_matching_ai_risk(fallback: RiskItem, ai_items: list[RiskItem]) -> RiskItem | None:
+    for item in ai_items:
+        if item.source_id == fallback.source_id or item.title == fallback.title:
+            return item
+    return None
+
+
+def has_equivalent_risk(candidate: RiskItem, risks: list[RiskItem]) -> bool:
+    return any(risk.source_id == candidate.source_id or risk.title == candidate.title for risk in risks)
+
+
+def get_risk(risk_id: str) -> RiskItem | None:
+    if _use_sqlalchemy():
+        with session_scope() as session:
+            record = session.get(RiskRecord, risk_id)
+            return _record_to_risk(record) if record is not None else None
+    return RISKS.get(risk_id)
+
+
+def update_risk(risk_id: str, payload: RiskUpdate) -> RiskItem | None:
+    risk = get_risk(risk_id)
+    if risk is None:
+        return None
+    updates = payload.model_dump(exclude_unset=True)
+    if not updates:
+        return risk
+    updated = risk.model_copy(update=updates)
+    _save_risk(updated)
+    return updated
+
+
+def publish_risk(risk_id: str) -> RiskItem | None:
+    risk = get_risk(risk_id)
+    if risk is None:
+        return None
+    updated = risk.model_copy(update={"status": "published"})
+    _save_risk(updated)
+    return updated
+
+
+def delete_risk(risk_id: str) -> bool:
+    if _use_sqlalchemy():
+        with session_scope() as session:
+            result = session.execute(delete(RiskRecord).where(RiskRecord.id == risk_id))
+            return (result.rowcount or 0) > 0
+    return RISKS.pop(risk_id, None) is not None
 
 
 def build_jira_risk(project_id: str, row: dict[str, str]) -> RiskItem:

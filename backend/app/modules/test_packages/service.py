@@ -1,13 +1,13 @@
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from sqlalchemy import DateTime, JSON, String, Text, select
+from sqlalchemy import DateTime, JSON, String, Text, delete, select
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.config import get_settings
 from app.core.database import Base, session_scope
 from app.modules.test_items.service import list_test_items
-from app.modules.test_packages.schemas import TestPackageAsset, TestPackageItem
+from app.modules.test_packages.schemas import TestPackageAsset, TestPackageItem, TestPackageUpdate
 
 TEST_PACKAGES: dict[str, TestPackageAsset] = {}
 
@@ -80,6 +80,28 @@ def publish_package(package_id: str) -> TestPackageAsset | None:
     updated = package.model_copy(update={"status": "published"})
     _save_package(updated)
     return updated
+
+
+def update_package(package_id: str, payload: TestPackageUpdate) -> TestPackageAsset | None:
+    package = get_package(package_id)
+    if package is None:
+        return None
+    updates = payload.model_dump(exclude_unset=True)
+    if not updates:
+        return package
+    if "items" in updates:
+        updates["items"] = [TestPackageItem(**item) for item in updates["items"]]
+    updated = package.model_copy(update={**updates, "status": "draft" if package.status != "draft" else package.status})
+    _save_package(updated)
+    return updated
+
+
+def delete_package(package_id: str) -> bool:
+    if _use_sqlalchemy():
+        with session_scope() as session:
+            result = session.execute(delete(TestPackageRecord).where(TestPackageRecord.id == package_id))
+            return (result.rowcount or 0) > 0
+    return TEST_PACKAGES.pop(package_id, None) is not None
 
 
 def get_package(package_id: str) -> TestPackageAsset | None:
