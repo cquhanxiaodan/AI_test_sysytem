@@ -81,7 +81,8 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 - Context: Agent 在执行 PostgreSQL/MinIO 持久化增强时发现
 - Category: 环境配置
 - Instructions:
-  - 本地无外部依赖测试默认使用 `REPOSITORY_BACKEND=memory` 和 `STORAGE_BACKEND=local`。
+  - 本地预览默认使用 `REPOSITORY_BACKEND=sqlalchemy`、SQLite 和 `STORAGE_BACKEND=local`，确保重启后业务数据保留。
+  - 单元测试显式设置 `REPOSITORY_BACKEND=memory` 和临时配置路径，避免测试数据互相污染。
   - Docker Compose 部署使用 `REPOSITORY_BACKEND=sqlalchemy` 和 `STORAGE_BACKEND=minio`。
   - SQLAlchemy 路径启动时通过 FastAPI lifespan 调用 `init_database()` 自动建表。
 

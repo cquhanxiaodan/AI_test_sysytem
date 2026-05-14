@@ -89,7 +89,7 @@ REPOSITORY_BACKEND="sqlalchemy"
 STORAGE_BACKEND="minio"
 ```
 
-单独运行后端测试时，默认代码配置仍使用内存仓库和本地文件存储，方便在没有 PostgreSQL、MinIO 或 Docker 的环境中快速验证。
+单独运行后端时，默认代码配置使用 SQLite 和本地文件存储，数据会保存在 `backend/storage/gene-test.db` 与 `backend/storage/` 下，重启后资料、测试条目、归口包和风险知识源会保留。后端测试会在测试用例中显式切换到内存仓库，避免测试数据互相污染。
 
 ## AI 模型接入
 

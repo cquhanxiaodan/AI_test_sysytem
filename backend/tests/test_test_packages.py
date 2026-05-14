@@ -1,4 +1,5 @@
 from fastapi.testclient import TestClient
+from uuid import uuid4
 
 from app.main import app
 from app.modules.documents.repository import DOCUMENTS
@@ -11,6 +12,12 @@ client = TestClient(app)
 
 
 def setup_function() -> None:
+    from app.modules.admin import service as admin_service
+    from app.modules.ai.service import RUNTIME_AI_CONFIG
+
+    admin_service.get_settings().repository_backend = "memory"
+    admin_service.get_settings().system_config_path = f"/tmp/monkeycode-test-system-config-{uuid4()}.json"
+    RUNTIME_AI_CONFIG.clear()
     DOCUMENTS.clear()
     TASKS.clear()
     CHUNKS.clear()

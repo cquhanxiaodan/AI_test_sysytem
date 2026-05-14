@@ -8,11 +8,11 @@ class Settings(BaseSettings):
     app_name: str = "Gene Sequencer AI Test API"
     app_version: str = "0.1.0"
     environment: str = "local"
-    repository_backend: str = "memory"
+    repository_backend: str = "sqlalchemy"
     storage_backend: str = "local"
 
     database_url: str = Field(
-        default="postgresql+psycopg://app:app@postgres:5432/gene_test"
+        default="sqlite:///storage/gene-test.db"
     )
     redis_url: str = "redis://redis:6379/0"
     celery_broker_url: str = "redis://redis:6379/1"
