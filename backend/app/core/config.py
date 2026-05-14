@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     minio_secure: bool = False
     minio_bucket: str = "gene-test-documents"
     local_storage_root: str = "storage"
+    document_import_directory: str = ""
     validation_plan_template_path: str = "templates/validation-plan-v1.docx"
 
     ai_provider: str = "local"

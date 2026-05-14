@@ -1,9 +1,15 @@
+from hashlib import sha256
+from mimetypes import guess_type
+from pathlib import Path
+
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 
+from app.core.config import get_settings
 from app.modules.auth.dependencies import get_current_user
 from app.modules.auth.seed_data import SeedUser
 from app.modules.documents.repository import (
     create_document,
+    find_document_by_hash,
     get_document_content,
     get_document,
     list_documents,
@@ -11,6 +17,10 @@ from app.modules.documents.repository import (
     update_labels,
 )
 from app.modules.documents.schemas import (
+    DocumentBatchUploadResponse,
+    DocumentDirectoryScanResponse,
+    DocumentImportConfigRead,
+    DocumentImportConfigUpdate,
     DocumentLabelUpdate,
     DocumentRead,
     DocumentReviewRequest,
@@ -23,6 +33,7 @@ from app.modules.test_items.service import split_document_to_items
 from app.modules.test_packages.service import generate_rfid_supplier_change_package
 
 router = APIRouter(prefix="/documents", tags=["documents"])
+RUNTIME_IMPORT_CONFIG: dict[str, str] = {}
 
 
 @router.post("/upload", response_model=DocumentUploadResponse)
@@ -45,6 +56,89 @@ async def upload_document(
     return DocumentUploadResponse(document=document)
 
 
+@router.post("/upload-batch", response_model=DocumentBatchUploadResponse)
+async def upload_documents(
+    project_id: str = Form(...),
+    files: list[UploadFile] = File(...),
+    current_user: SeedUser = Depends(get_current_user),
+) -> DocumentBatchUploadResponse:
+    if get_project_for_user(project_id, current_user) is None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Project access denied")
+    documents = []
+    for file in files:
+        content = await file.read()
+        documents.append(
+            create_document(
+                project_id=project_id,
+                filename=file.filename or "uploaded-file",
+                content_type=file.content_type or "application/octet-stream",
+                content=content,
+                uploaded_by=current_user.id,
+            )
+        )
+    return DocumentBatchUploadResponse(documents=documents)
+
+
+@router.get("/import-config", response_model=DocumentImportConfigRead)
+def get_import_config(current_user: SeedUser = Depends(get_current_user)) -> DocumentImportConfigRead:
+    import_directory = get_import_directory()
+    return DocumentImportConfigRead(import_directory=import_directory, configured=bool(import_directory))
+
+
+@router.put("/import-config", response_model=DocumentImportConfigRead)
+def update_import_config(
+    payload: DocumentImportConfigUpdate,
+    current_user: SeedUser = Depends(get_current_user),
+) -> DocumentImportConfigRead:
+    if "admin" not in current_user.roles:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required")
+    RUNTIME_IMPORT_CONFIG["import_directory"] = payload.import_directory.strip()
+    return get_import_config(current_user)
+
+
+@router.post("/scan-import-directory", response_model=DocumentDirectoryScanResponse)
+def scan_import_directory(
+    project_id: str = Form(...),
+    current_user: SeedUser = Depends(get_current_user),
+) -> DocumentDirectoryScanResponse:
+    if get_project_for_user(project_id, current_user) is None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Project access denied")
+    import_directory = get_import_directory()
+    if not import_directory:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Import directory is not configured")
+    base_path = Path(import_directory).expanduser().resolve()
+    if not base_path.exists() or not base_path.is_dir():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Import directory is not available")
+
+    imported: list[DocumentRead] = []
+    skipped: list[str] = []
+    errors: list[str] = []
+    for path in sorted(base_path.iterdir()):
+        if not path.is_file():
+            skipped.append(path.name)
+            continue
+        try:
+            content = path.read_bytes()
+        except OSError as exc:
+            errors.append(f"{path.name}: {exc}")
+            continue
+        file_hash = sha256(content).hexdigest()
+        if find_document_by_hash(file_hash, project_id) is not None:
+            skipped.append(path.name)
+            continue
+        content_type = guess_type(path.name)[0] or "application/octet-stream"
+        imported.append(
+            create_document(
+                project_id=project_id,
+                filename=path.name,
+                content_type=content_type,
+                content=content,
+                uploaded_by=current_user.id,
+            )
+        )
+    return DocumentDirectoryScanResponse(import_directory=str(base_path), imported=imported, skipped=skipped, errors=errors)
+
+
 @router.get("", response_model=list[DocumentRead])
 def documents(
     project_id: str | None = None,
@@ -53,6 +147,10 @@ def documents(
     if project_id is not None and get_project_for_user(project_id, current_user) is None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Project access denied")
     return list_documents(project_id)
+
+
+def get_import_directory() -> str:
+    return RUNTIME_IMPORT_CONFIG.get("import_directory", get_settings().document_import_directory).strip()
 
 
 @router.get("/{document_id}", response_model=DocumentRead)

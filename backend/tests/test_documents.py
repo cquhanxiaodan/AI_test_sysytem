@@ -42,6 +42,70 @@ def test_upload_document_suggests_labels() -> None:
     assert {item["label_key"] for item in document["label_suggestions"]} >= {"product_model", "subsystem", "document_type"}
 
 
+def test_batch_upload_documents() -> None:
+    response = client.post(
+        "/api/documents/upload-batch",
+        headers=auth_headers(),
+        data={"project_id": "project-g99-rfid"},
+        files=[
+            ("files", ("DNBSEQ-G99 RFID验证方案.docx", b"demo-1", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")),
+            ("files", ("jira-rfid.csv", "title\nRFID读取失败\n".encode("utf-8"), "text/csv")),
+        ],
+    )
+
+    assert response.status_code == 200
+    documents = response.json()["documents"]
+    assert len(documents) == 2
+    assert documents[0]["status"] == "pending_label"
+    assert documents[1]["status"] == "pending_label"
+
+
+def test_scan_import_directory_imports_new_files(tmp_path) -> None:
+    headers = auth_headers()
+    import_dir = tmp_path / "imports"
+    import_dir.mkdir()
+    (import_dir / "DNBSEQ-G99 RFID验证方案.txt").write_bytes(b"RFID validation")
+    (import_dir / "jira-rfid.csv").write_text("title\nRFID读取失败\n", encoding="utf-8")
+
+    config_response = client.put(
+        "/api/documents/import-config",
+        headers=headers,
+        json={"import_directory": str(import_dir)},
+    )
+    assert config_response.status_code == 200
+    assert config_response.json()["configured"] is True
+
+    first_scan = client.post(
+        "/api/documents/scan-import-directory",
+        headers=headers,
+        data={"project_id": "project-g99-rfid"},
+    )
+
+    assert first_scan.status_code == 200
+    assert len(first_scan.json()["imported"]) == 2
+    assert first_scan.json()["skipped"] == []
+
+    second_scan = client.post(
+        "/api/documents/scan-import-directory",
+        headers=headers,
+        data={"project_id": "project-g99-rfid"},
+    )
+
+    assert second_scan.status_code == 200
+    assert second_scan.json()["imported"] == []
+    assert set(second_scan.json()["skipped"]) == {"DNBSEQ-G99 RFID验证方案.txt", "jira-rfid.csv"}
+
+
+def test_tester_cannot_update_import_directory() -> None:
+    response = client.put(
+        "/api/documents/import-config",
+        headers=auth_headers("tester", "tester123"),
+        json={"import_directory": "/data/imports"},
+    )
+
+    assert response.status_code == 403
+
+
 def test_document_label_update_moves_to_review() -> None:
     headers = auth_headers()
     upload = client.post(

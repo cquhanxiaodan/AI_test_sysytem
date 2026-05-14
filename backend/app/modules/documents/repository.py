@@ -66,6 +66,13 @@ def create_document(
     return document
 
 
+def find_document_by_hash(file_hash: str, project_id: str | None = None) -> DocumentRead | None:
+    for document in list_documents(project_id):
+        if document.file_hash == file_hash:
+            return document
+    return None
+
+
 def list_documents(project_id: str | None = None) -> list[DocumentRead]:
     if _use_sqlalchemy():
         with session_scope() as session:

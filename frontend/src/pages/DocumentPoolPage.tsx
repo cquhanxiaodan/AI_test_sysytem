@@ -1,15 +1,20 @@
 import { Button, Card, Form, Input, message, Modal, Space, Table, Tag, Typography, Upload } from "antd";
 import type { ColumnsType } from "antd/es/table";
+import type { UploadFile } from "antd/es/upload/interface";
 import { useEffect, useState } from "react";
 import {
+  DocumentDirectoryScanResult,
   DocumentItem,
+  fetchDocumentImportConfig,
   extractDocumentLabels,
   fetchDocuments,
   parseDocument,
   ParsingTask,
   reviewDocument,
+  scanDocumentImportDirectory,
   updateDocumentLabels,
   uploadDocument,
+  uploadDocuments,
 } from "../api/client";
 import { useProjects } from "../context/ProjectContext";
 
@@ -19,6 +24,9 @@ export default function DocumentPoolPage() {
   const [loading, setLoading] = useState(false);
   const [editing, setEditing] = useState<DocumentItem | null>(null);
   const [lastTask, setLastTask] = useState<ParsingTask | null>(null);
+  const [importDirectory, setImportDirectory] = useState("");
+  const [lastScan, setLastScan] = useState<DocumentDirectoryScanResult | null>(null);
+  const [batchFiles, setBatchFiles] = useState<UploadFile[]>([]);
   const [form] = Form.useForm<Record<string, string>>();
 
   async function loadDocuments() {
@@ -33,6 +41,9 @@ export default function DocumentPoolPage() {
 
   useEffect(() => {
     loadDocuments();
+    fetchDocumentImportConfig()
+      .then((config) => setImportDirectory(config.import_directory))
+      .catch(() => setImportDirectory(""));
   }, [currentProject?.id]);
 
   async function handleUpload(file: File) {
@@ -41,6 +52,33 @@ export default function DocumentPoolPage() {
     message.success("资料已上传，请确认标签；管理员发布后系统会自动沉淀对应测试资产");
     await loadDocuments();
     return false;
+  }
+
+  function handleBatchUpload(file: UploadFile) {
+    setBatchFiles((current) => [...current, file]);
+    return false;
+  }
+
+  async function submitBatchUpload() {
+    if (!currentProject) return false;
+    const files = batchFiles.flatMap((file) => file.originFileObj ? [file.originFileObj as File] : []);
+    if (files.length === 0) {
+      message.warning("请先选择批量上传文件");
+      return false;
+    }
+    const result = await uploadDocuments(currentProject.id, files);
+    setBatchFiles([]);
+    message.success(`已批量上传 ${result.documents.length} 个资料，请确认标签`);
+    await loadDocuments();
+    return false;
+  }
+
+  async function scanImportDirectory() {
+    if (!currentProject) return;
+    const result = await scanDocumentImportDirectory(currentProject.id);
+    setLastScan(result);
+    message.success(`扫描完成，新增导入 ${result.imported.length} 个资料`);
+    await loadDocuments();
   }
 
   function openLabelModal(document: DocumentItem) {
@@ -120,7 +158,22 @@ export default function DocumentPoolPage() {
         <Upload beforeUpload={handleUpload} showUploadList={false}>
           <Button type="primary" disabled={!currentProject}>上传资料</Button>
         </Upload>
+        <Upload
+          beforeUpload={handleBatchUpload}
+          fileList={batchFiles}
+          onRemove={(file) => setBatchFiles((current) => current.filter((item) => item.uid !== file.uid))}
+          multiple
+        >
+          <Button disabled={!currentProject}>选择批量文件</Button>
+        </Upload>
+        <Button disabled={!currentProject || batchFiles.length === 0} onClick={submitBatchUpload}>提交批量上传</Button>
+        <Button disabled={!currentProject || !importDirectory} onClick={scanImportDirectory}>扫描新增资料</Button>
       </Space>
+      <Card className="section-card">
+        <Typography.Paragraph type="secondary">
+          服务器导入目录：{importDirectory || "未配置，请到系统设置中配置资料导入目录"}
+        </Typography.Paragraph>
+      </Card>
       <Card>
         <Table rowKey="id" loading={loading} columns={columns} dataSource={documents} pagination={false} />
       </Card>
@@ -132,6 +185,14 @@ export default function DocumentPoolPage() {
               {chunk.sequence}. {chunk.text}
             </Typography.Paragraph>
           ))}
+        </Card>
+      )}
+      {lastScan && (
+        <Card title="最近目录扫描结果" className="section-card">
+          <Typography.Paragraph>目录：{lastScan.import_directory}</Typography.Paragraph>
+          <Typography.Paragraph>新增导入：{lastScan.imported.length} 个；跳过：{lastScan.skipped.length} 个；失败：{lastScan.errors.length} 个</Typography.Paragraph>
+          {lastScan.imported.map((document) => <Tag key={document.id} color="green">{document.filename}</Tag>)}
+          {lastScan.errors.map((error) => <Typography.Paragraph key={error} type="danger">{error}</Typography.Paragraph>)}
         </Card>
       )}
       <Modal title="确认资料标签" open={Boolean(editing)} onCancel={() => setEditing(null)} onOk={saveLabels}>

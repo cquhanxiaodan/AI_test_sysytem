@@ -37,6 +37,26 @@ class DocumentUploadResponse(BaseModel):
     document: DocumentRead
 
 
+class DocumentBatchUploadResponse(BaseModel):
+    documents: list[DocumentRead]
+
+
+class DocumentImportConfigRead(BaseModel):
+    import_directory: str
+    configured: bool
+
+
+class DocumentImportConfigUpdate(BaseModel):
+    import_directory: str = ""
+
+
+class DocumentDirectoryScanResponse(BaseModel):
+    import_directory: str
+    imported: list[DocumentRead]
+    skipped: list[str]
+    errors: list[str]
+
+
 class DocumentLabelUpdate(BaseModel):
     labels: dict[str, str]
 

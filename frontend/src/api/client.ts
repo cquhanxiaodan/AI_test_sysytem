@@ -49,6 +49,18 @@ export type DocumentItem = {
   created_at: string;
 };
 
+export type DocumentImportConfig = {
+  import_directory: string;
+  configured: boolean;
+};
+
+export type DocumentDirectoryScanResult = {
+  import_directory: string;
+  imported: DocumentItem[];
+  skipped: string[];
+  errors: string[];
+};
+
 export type ParsingTask = {
   id: string;
   document_id: string;
@@ -326,6 +338,53 @@ export async function uploadDocument(projectId: string, file: File) {
   }
 
   return response.json() as Promise<{ document: DocumentItem }>;
+}
+
+export async function uploadDocuments(projectId: string, files: File[]) {
+  const token = getToken();
+  const body = new FormData();
+  body.append("project_id", projectId);
+  files.forEach((file) => body.append("files", file));
+
+  const response = await fetch("/api/documents/upload-batch", {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body,
+  });
+
+  if (!response.ok) {
+    throw new Error(await response.text());
+  }
+
+  return response.json() as Promise<{ documents: DocumentItem[] }>;
+}
+
+export async function fetchDocumentImportConfig() {
+  return request<DocumentImportConfig>("/api/documents/import-config");
+}
+
+export async function updateDocumentImportConfig(importDirectory: string) {
+  return request<DocumentImportConfig>("/api/documents/import-config", {
+    method: "PUT",
+    body: JSON.stringify({ import_directory: importDirectory }),
+  });
+}
+
+export async function scanDocumentImportDirectory(projectId: string) {
+  const token = getToken();
+  const body = new FormData();
+  body.append("project_id", projectId);
+  const response = await fetch("/api/documents/scan-import-directory", {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body,
+  });
+
+  if (!response.ok) {
+    throw new Error(await response.text());
+  }
+
+  return response.json() as Promise<DocumentDirectoryScanResult>;
 }
 
 export async function updateDocumentLabels(documentId: string, labels: Record<string, string>) {
