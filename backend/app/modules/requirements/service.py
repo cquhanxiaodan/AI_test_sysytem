@@ -13,7 +13,9 @@ from app.modules.knowledge.service import search_project_knowledge
 from app.modules.requirements.schemas import (
     RequirementAnalysisRead,
     RequirementParseResult,
+    RequirementRecommendationCreate,
     RequirementRecommendation,
+    RequirementRecommendationUpdate,
 )
 from app.modules.risks.service import list_risks
 from app.modules.test_packages.service import list_packages
@@ -251,24 +253,28 @@ def build_recommendations(project_id: str, parse_result: RequirementParseResult)
             }.get(item.relation_type, "建议")
             recommendations.append(
                 RequirementRecommendation(
+                    id=f"rec-{uuid4()}",
                     group=group,
                     title=item.title,
                     source_type="test_package",
                     source_id=package.id,
                     reason=f"匹配归口包：{package.name}",
                     evidence=package.evidence,
+                    review_status="pending",
                 )
             )
 
     for risk in list_risks(project_id=project_id, subsystem=parse_result.subsystem):
         recommendations.append(
             RequirementRecommendation(
+                id=f"rec-{uuid4()}",
                 group="风险补充",
                 title=risk.suggested_test,
                 source_type=risk.source_type,
                 source_id=risk.id,
                 reason=f"风险项：{risk.title}",
                 evidence=risk.description,
+                review_status="pending",
             )
         )
 
@@ -317,12 +323,14 @@ def enrich_recommendations_with_ai(
                 continue
             enriched.append(
                 RequirementRecommendation(
+                    id=f"rec-{uuid4()}",
                     group=group,
                     title=title,
                     source_type=str(raw_item.get("source_type") or "knowledge"),
                     source_id=source_id,
                     reason=str(raw_item.get("reason") or "基于本地知识命中补充推荐"),
                     evidence=str(raw_item.get("evidence") or output.get("evidence") or "本地知识命中"),
+                    review_status="pending",
                 )
             )
             seen.add((title, source_id))
