@@ -9,6 +9,8 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.config import get_settings
 from app.core.database import Base, session_scope
+from app.modules.admin.schemas import AiSettingsConfig
+from app.modules.admin.service import get_persisted_ai_config, save_ai_settings
 from app.modules.ai.schemas import AiConfigRead, AiConfigUpdate, AiRunRecord
 
 AI_RUNS: dict[str, AiRunRecord] = {}
@@ -82,17 +84,26 @@ def update_ai_config(payload: AiConfigUpdate) -> AiConfigRead:
         RUNTIME_AI_CONFIG["api_key"] = current_api_key
     if provider == "local":
         RUNTIME_AI_CONFIG.update({"base_url": "", "model": "", "api_key": ""})
+    save_ai_settings(
+        AiSettingsConfig(
+            provider=str(RUNTIME_AI_CONFIG.get("provider", provider)),
+            base_url=str(RUNTIME_AI_CONFIG.get("base_url", "")),
+            api_key=str(RUNTIME_AI_CONFIG.get("api_key", "")),
+            model=str(RUNTIME_AI_CONFIG.get("model", "")),
+            timeout_seconds=int(RUNTIME_AI_CONFIG.get("timeout_seconds", timeout_seconds)),
+        )
+    )
     return get_ai_config()
 
 
 def get_ai_runtime_values() -> tuple[str, str, str, str, int]:
-    settings = get_settings()
+    persisted = get_persisted_ai_config()
     return (
-        str(RUNTIME_AI_CONFIG.get("provider", settings.ai_provider)),
-        str(RUNTIME_AI_CONFIG.get("base_url", settings.ai_base_url)),
-        str(RUNTIME_AI_CONFIG.get("api_key", settings.ai_api_key)),
-        str(RUNTIME_AI_CONFIG.get("model", settings.ai_model)),
-        int(RUNTIME_AI_CONFIG.get("timeout_seconds", settings.ai_timeout_seconds)),
+        str(RUNTIME_AI_CONFIG.get("provider", persisted.provider)),
+        str(RUNTIME_AI_CONFIG.get("base_url", persisted.base_url)),
+        str(RUNTIME_AI_CONFIG.get("api_key", persisted.api_key)),
+        str(RUNTIME_AI_CONFIG.get("model", persisted.model)),
+        int(RUNTIME_AI_CONFIG.get("timeout_seconds", persisted.timeout_seconds)),
     )
 
 

@@ -1,6 +1,18 @@
 import { Button, Card, Descriptions, Form, Input, InputNumber, Select, Space, Tag, Typography, message } from "antd";
 import { useEffect, useState } from "react";
-import { AiConfig, DocumentImportConfig, fetchAiConfig, fetchDocumentImportConfig, updateAiConfig, updateDocumentImportConfig } from "../api/client";
+import {
+  AiConfig,
+  DocumentImportConfig,
+  fetchAiConfig,
+  fetchDocumentImportConfig,
+  fetchSystemConfig,
+  SystemConfig,
+  SystemConfigUpdate,
+  restoreSystemConfigBackup,
+  updateAiConfig,
+  updateDocumentImportConfig,
+  updateSystemConfig,
+} from "../api/client";
 
 type AiSettingsForm = {
   provider: string;
@@ -14,14 +26,19 @@ type DocumentImportForm = {
   import_directory: string;
 };
 
+type DictionaryForm = Required<SystemConfigUpdate>;
+
 export default function SettingsPage() {
   const [form] = Form.useForm<AiSettingsForm>();
   const [documentImportForm] = Form.useForm<DocumentImportForm>();
+  const [dictionaryForm] = Form.useForm<DictionaryForm>();
   const [aiConfig, setAiConfig] = useState<AiConfig | null>(null);
   const [documentImportConfig, setDocumentImportConfig] = useState<DocumentImportConfig | null>(null);
+  const [systemConfig, setSystemConfig] = useState<SystemConfig | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savingDocumentImport, setSavingDocumentImport] = useState(false);
+  const [savingDictionaries, setSavingDictionaries] = useState(false);
 
   function loadConfig() {
     setLoading(true);
@@ -49,9 +66,25 @@ export default function SettingsPage() {
       .catch((error: Error) => message.error(`读取资料导入配置失败：${error.message}`));
   }
 
+  function loadSystemConfig() {
+    fetchSystemConfig()
+      .then((config) => {
+        setSystemConfig(config);
+        dictionaryForm.setFieldsValue({
+          subsystem_catalog: config.subsystem_catalog,
+          document_types: config.document_types,
+          test_levels: config.test_levels,
+          test_types: config.test_types,
+          change_types: config.change_types,
+        });
+      })
+      .catch((error: Error) => message.error(`读取系统字典失败：${error.message}`));
+  }
+
   useEffect(() => {
     loadConfig();
     loadDocumentImportConfig();
+    loadSystemConfig();
   }, []);
 
   function save(values: AiSettingsForm) {
@@ -75,6 +108,42 @@ export default function SettingsPage() {
       })
       .catch((error: Error) => message.error(`保存失败：${error.message}`))
       .finally(() => setSavingDocumentImport(false));
+  }
+
+  function saveDictionaries(values: DictionaryForm) {
+    setSavingDictionaries(true);
+    updateSystemConfig(values)
+      .then((config) => {
+        setSystemConfig(config);
+        dictionaryForm.setFieldsValue({
+          subsystem_catalog: config.subsystem_catalog,
+          document_types: config.document_types,
+          test_levels: config.test_levels,
+          test_types: config.test_types,
+          change_types: config.change_types,
+        });
+        message.success("系统字典已保存");
+      })
+      .catch((error: Error) => message.error(`保存失败：${error.message}`))
+      .finally(() => setSavingDictionaries(false));
+  }
+
+  function restoreDictionaries() {
+    setSavingDictionaries(true);
+    restoreSystemConfigBackup()
+      .then((config) => {
+        setSystemConfig(config);
+        dictionaryForm.setFieldsValue({
+          subsystem_catalog: config.subsystem_catalog,
+          document_types: config.document_types,
+          test_levels: config.test_levels,
+          test_types: config.test_types,
+          change_types: config.change_types,
+        });
+        message.success("已恢复上一版系统字典");
+      })
+      .catch((error: Error) => message.error(`恢复失败：${error.message}`))
+      .finally(() => setSavingDictionaries(false));
   }
 
   return (
@@ -147,6 +216,41 @@ export default function SettingsPage() {
           <Space>
             <Button type="primary" htmlType="submit" loading={savingDocumentImport}>保存导入目录</Button>
             <Button onClick={loadDocumentImportConfig}>刷新目录配置</Button>
+          </Space>
+        </Form>
+      </Card>
+
+      <Card title="系统字典配置" className="section-card">
+        <Typography.Paragraph type="secondary">
+          管理测试资产、资料标签和需求分析中使用的可选项。保存后，测试资产编辑弹窗会使用最新选项。
+        </Typography.Paragraph>
+        {systemConfig && (
+          <Descriptions column={1} size="small" className="section-card">
+            <Descriptions.Item label="当前子系统">{systemConfig.subsystem_catalog.join("、")}</Descriptions.Item>
+            <Descriptions.Item label="当前测试层级">{systemConfig.test_levels.join("、")}</Descriptions.Item>
+            <Descriptions.Item label="当前测试类型">{systemConfig.test_types.join("、")}</Descriptions.Item>
+          </Descriptions>
+        )}
+        <Form form={dictionaryForm} layout="vertical" onFinish={saveDictionaries}>
+          <Form.Item name="subsystem_catalog" label="子系统目录" extra="用于测试资产的主子系统和关联子系统选项。">
+            <Select mode="tags" tokenSeparators={[",", "，"]} placeholder="输入后回车添加，例如 RFID" />
+          </Form.Item>
+          <Form.Item name="test_levels" label="测试层级">
+            <Select mode="tags" tokenSeparators={[",", "，"]} placeholder="输入后回车添加，例如 子系统级" />
+          </Form.Item>
+          <Form.Item name="test_types" label="测试类型">
+            <Select mode="tags" tokenSeparators={[",", "，"]} placeholder="输入后回车添加，例如 功能测试" />
+          </Form.Item>
+          <Form.Item name="document_types" label="资料类型">
+            <Select mode="tags" tokenSeparators={[",", "，"]} placeholder="输入后回车添加，例如 验证方案" />
+          </Form.Item>
+          <Form.Item name="change_types" label="变更类型">
+            <Select mode="tags" tokenSeparators={[",", "，"]} placeholder="输入后回车添加，例如 供应商变更" />
+          </Form.Item>
+          <Space>
+            <Button type="primary" htmlType="submit" loading={savingDictionaries}>保存系统字典</Button>
+            <Button onClick={restoreDictionaries} loading={savingDictionaries}>恢复上一版</Button>
+            <Button onClick={loadSystemConfig}>刷新字典</Button>
           </Space>
         </Form>
       </Card>

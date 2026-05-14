@@ -1,6 +1,8 @@
 from datetime import UTC, datetime
+from io import BytesIO
 from uuid import uuid4
 
+from docx import Document
 from sqlalchemy import DateTime, Integer, String, Text, delete, select
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -195,6 +197,11 @@ def _chunk_record_to_read(record: DocumentChunkRecord) -> DocumentChunk:
 
 
 def extract_text(filename: str, content: bytes) -> str:
+    if filename.lower().endswith(".docx"):
+        text = extract_docx_text(content)
+        if text.strip():
+            return text
+
     try:
         decoded = content.decode("utf-8")
     except UnicodeDecodeError:
@@ -203,6 +210,26 @@ def extract_text(filename: str, content: bytes) -> str:
     if decoded.strip():
         return decoded
     return f"{filename}\n该资料已上传，真实解析器接入后将提取 Word/PDF/Excel 正文、表格和章节结构。"
+
+
+def extract_docx_text(content: bytes) -> str:
+    try:
+        document = Document(BytesIO(content))
+    except Exception:
+        return ""
+    lines: list[str] = []
+    for paragraph in document.paragraphs:
+        text = paragraph.text.strip()
+        if text:
+            lines.append(text)
+    for table_index, table in enumerate(document.tables, start=1):
+        lines.append(f"表格 {table_index}")
+        for row in table.rows:
+            cells = [cell.text.strip().replace("\n", " ") for cell in row.cells]
+            row_text = " | ".join(cell for cell in cells if cell)
+            if row_text:
+                lines.append(row_text)
+    return "\n".join(lines)
 
 
 def build_chunks(document_id: str, text: str) -> list[DocumentChunk]:

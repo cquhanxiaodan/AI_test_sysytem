@@ -57,6 +57,15 @@ class DocumentDirectoryScanResponse(BaseModel):
     errors: list[str]
 
 
+class DocumentBulkDeleteRequest(BaseModel):
+    document_ids: list[str]
+
+
+class DocumentBulkDeleteResponse(BaseModel):
+    deleted_ids: list[str]
+    skipped: list[dict[str, str]]
+
+
 class DocumentLabelUpdate(BaseModel):
     labels: dict[str, str]
 

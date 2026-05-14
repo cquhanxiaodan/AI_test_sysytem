@@ -1,7 +1,8 @@
 from fastapi.testclient import TestClient
+from uuid import uuid4
 
 from app.main import app
-from app.modules.admin.service import AUDIT_EVENTS
+from app.modules.admin.service import AUDIT_EVENTS, CONFIG
 
 
 client = TestClient(app)
@@ -9,6 +10,12 @@ client = TestClient(app)
 
 def setup_function() -> None:
     AUDIT_EVENTS.clear()
+    from app.modules.admin import service
+
+    service.CONFIG = CONFIG
+    settings = service.get_settings()
+    settings.repository_backend = "memory"
+    settings.system_config_path = f"/tmp/monkeycode-test-system-config-{uuid4()}.json"
 
 
 def auth_headers(username: str = "admin", password: str = "admin123") -> dict[str, str]:
@@ -22,6 +29,119 @@ def test_get_system_config() -> None:
 
     assert response.status_code == 200
     assert "RFID" in response.json()["subsystem_catalog"]
+
+
+def test_admin_can_update_system_dictionary_options() -> None:
+    response = client.put(
+        "/api/admin/config",
+        headers=auth_headers(),
+        json={
+            "subsystem_catalog": ["RFID", "流体系统", "RFID"],
+            "test_levels": ["部件级", "整机级"],
+            "test_types": ["功能测试", "可靠性测试"],
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["subsystem_catalog"] == ["RFID", "流体系统"]
+    assert response.json()["test_levels"] == ["部件级", "整机级"]
+    assert response.json()["test_types"] == ["功能测试", "可靠性测试"]
+
+
+def test_tester_cannot_update_system_config() -> None:
+    response = client.put(
+        "/api/admin/config",
+        headers=auth_headers("tester", "tester123"),
+        json={"test_types": ["可靠性测试"]},
+    )
+
+    assert response.status_code == 403
+
+
+def test_memory_system_config_persists_to_file(tmp_path) -> None:
+    from app.modules.admin import service
+
+    service.get_settings().system_config_path = str(tmp_path / "system-config.json")
+    response = client.put(
+        "/api/admin/config",
+        headers=auth_headers(),
+        json={"test_levels": ["部件级", "整机级"]},
+    )
+
+    assert response.status_code == 200
+    service.CONFIG = CONFIG
+    persisted = client.get("/api/admin/config", headers=auth_headers())
+    assert persisted.json()["test_levels"] == ["部件级", "整机级"]
+
+
+def test_old_system_config_file_format_still_loads(tmp_path) -> None:
+    from app.modules.admin import service
+
+    config_path = tmp_path / "system-config.json"
+    config_path.write_text('{"test_types": ["旧格式类型"]}', encoding="utf-8")
+    service.get_settings().system_config_path = str(config_path)
+
+    response = client.get("/api/admin/config", headers=auth_headers())
+
+    assert response.status_code == 200
+    assert response.json()["test_types"] == ["旧格式类型"]
+
+
+def test_saving_system_config_preserves_other_settings(tmp_path) -> None:
+    from app.modules.admin import service
+    from app.modules.admin.schemas import AiSettingsConfig
+
+    service.get_settings().system_config_path = str(tmp_path / "system-config.json")
+    service.save_ai_settings(AiSettingsConfig(provider="openai-compatible", base_url="https://model.example.com/v1", api_key="secret", model="model-a", timeout_seconds=25))
+    service.save_import_directory("/data/imports")
+
+    response = client.put("/api/admin/config", headers=auth_headers(), json={"test_types": ["保留验证类型"]})
+
+    assert response.status_code == 200
+    settings_file = service.load_settings_file()
+    assert settings_file is not None
+    assert settings_file.ai_config.model == "model-a"
+    assert settings_file.document_import_directory == "/data/imports"
+
+
+def test_memory_system_config_can_restore_backup(tmp_path) -> None:
+    from app.modules.admin import service
+
+    service.get_settings().system_config_path = str(tmp_path / "system-config.json")
+    headers = auth_headers()
+    client.put("/api/admin/config", headers=headers, json={"test_types": ["功能测试", "可靠性测试"]})
+    client.put("/api/admin/config", headers=headers, json={"test_types": ["误保存类型"]})
+
+    response = client.post("/api/admin/config/restore-backup", headers=headers)
+
+    assert response.status_code == 200
+    assert response.json()["test_types"] == ["功能测试", "可靠性测试"]
+
+
+def test_ai_save_does_not_overwrite_dictionary_backup(tmp_path) -> None:
+    from app.modules.admin import service
+    from app.modules.admin.schemas import AiSettingsConfig
+
+    service.get_settings().system_config_path = str(tmp_path / "system-config.json")
+    headers = auth_headers()
+    client.put("/api/admin/config", headers=headers, json={"test_types": ["用户配置类型"]})
+    client.put("/api/admin/config", headers=headers, json={"test_types": ["误覆盖类型"]})
+    service.save_ai_settings(AiSettingsConfig(provider="openai-compatible", base_url="https://model.example.com/v1", api_key="secret", model="model-a", timeout_seconds=25))
+
+    response = client.post("/api/admin/config/restore-backup", headers=headers)
+
+    assert response.status_code == 200
+    assert response.json()["test_types"] == ["用户配置类型"]
+
+
+def test_restore_system_config_backup_returns_404_when_missing(tmp_path) -> None:
+    from app.modules.admin import service
+
+    service.get_settings().system_config_path = str(tmp_path / "system-config.json")
+
+    response = client.post("/api/admin/config/restore-backup", headers=auth_headers())
+
+    assert response.status_code == 404
 
 
 def test_create_and_list_audit_event() -> None:

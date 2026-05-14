@@ -1,7 +1,8 @@
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from sqlalchemy import DateTime, JSON, String, Text, select
+from sqlalchemy import DateTime, JSON, String, Text, delete, select
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.config import get_settings
@@ -9,9 +10,42 @@ from app.core.database import Base, session_scope
 from app.modules.ai.service import run_json_task
 from app.modules.documents.repository import get_document
 from app.modules.parsing.service import list_chunks
-from app.modules.test_items.schemas import SplitResult, TestItemAsset
+from app.modules.test_items.schemas import SplitResult, TestItemAsset, TestItemUpdate
 
 TEST_ITEMS: dict[str, TestItemAsset] = {}
+
+SECTION_LABELS = {
+    "objective": ["测试目的/测试标准", "测试目的", "测试标准"],
+    "method": ["测试方法/原理", "测试方法", "测试原理"],
+    "tools": ["测试工具"],
+    "steps": ["测试步骤"],
+    "record_template": ["测试记录", "记录模板"],
+}
+BOUNDARY_LABELS = [
+    "测试目的/测试标准",
+    "测试目的",
+    "测试标准",
+    "测试方法/原理",
+    "测试方法",
+    "测试原理",
+    "测试工具",
+    "测试步骤",
+    "测试连接图或照片",
+    "测试记录",
+    "需求符合性和BUG信息",
+    "需求符合性结果",
+    "测试发现的BUG信息表",
+]
+
+
+@dataclass
+class ExtractedTestSection:
+    title: str
+    objective: str = ""
+    method: str = ""
+    tools: list[str] | None = None
+    steps: list[str] | None = None
+    record_template: str = ""
 
 
 class TestItemRecord(Base):
@@ -59,9 +93,12 @@ def split_document_to_items(document_id: str) -> SplitResult | None:
 
     chunks = list_chunks(document_id)
     text = "\n".join(chunk.text for chunk in chunks) or document.filename
-    titles = infer_test_titles(text)
-    items = [build_test_item(document.project_id, document_id, title, text) for title in titles]
+    extracted_sections = extract_test_sections(text)
+    titles = [section.title for section in extracted_sections] or infer_test_titles(text)
+    section_by_title = {section.title: section for section in extracted_sections}
+    items = [build_test_item(document.project_id, document_id, document.filename, title, section_by_title.get(title)) for title in titles]
     items = split_items_with_ai(document.project_id, document_id, document.filename, text, items) or items
+    items = [prefer_local_extracted_fields(item, document.filename, section_by_title.get(item.title)) for item in items]
     for item in items:
         _save_item(item)
     return SplitResult(document_id=document_id, items=items)
@@ -104,7 +141,7 @@ def split_items_with_ai(project_id: str, document_id: str, filename: str, text: 
                     tools=[str(value) for value in raw_item.get("tools", []) if isinstance(value, str)],
                     steps=[str(value) for value in raw_item.get("steps", []) if isinstance(value, str)],
                     record_template=str(raw_item.get("record_template") or "记录测试条件、实际结果、判定结论和关联 BUG。"),
-                    evidence=str(raw_item.get("evidence") or output.get("evidence") or text[:500])[:1000],
+                    evidence=filename,
                     status="draft",
                     created_at=datetime.now(UTC),
                 )
@@ -121,6 +158,26 @@ def confirm_item(item_id: str) -> TestItemAsset | None:
     updated = item.model_copy(update={"status": "published"})
     _save_item(updated)
     return updated
+
+
+def update_item(item_id: str, payload: TestItemUpdate) -> TestItemAsset | None:
+    item = get_item(item_id)
+    if item is None:
+        return None
+    updates = payload.model_dump(exclude_unset=True)
+    if not updates:
+        return item
+    updated = item.model_copy(update={**updates, "status": "draft" if item.status != "draft" else item.status})
+    _save_item(updated)
+    return updated
+
+
+def delete_item(item_id: str) -> bool:
+    if _use_sqlalchemy():
+        with session_scope() as session:
+            result = session.execute(delete(TestItemRecord).where(TestItemRecord.id == item_id))
+            return (result.rowcount or 0) > 0
+    return TEST_ITEMS.pop(item_id, None) is not None
 
 
 def get_item(item_id: str) -> TestItemAsset | None:
@@ -144,7 +201,121 @@ def infer_test_titles(text: str) -> list[str]:
     return ["资料来源测试条目"]
 
 
-def build_test_item(project_id: str, document_id: str, title: str, evidence_text: str) -> TestItemAsset:
+def extract_test_sections(text: str) -> list[ExtractedTestSection]:
+    lines = normalize_lines(text)
+    titles = infer_project_table_titles(lines)
+    sections: list[ExtractedTestSection] = []
+    for index, title in enumerate(titles):
+        start = find_detail_line_index(lines, title)
+        if start is None:
+            continue
+        next_start = find_next_title_index(lines, titles, start + 1)
+        section_lines = lines[start + 1 : next_start]
+        sections.append(
+            ExtractedTestSection(
+                title=title,
+                objective=extract_labeled_text(section_lines, SECTION_LABELS["objective"]),
+                method=extract_labeled_text(section_lines, SECTION_LABELS["method"]),
+                tools=split_list_text(extract_labeled_text(section_lines, SECTION_LABELS["tools"])),
+                steps=split_list_text(extract_labeled_text(section_lines, SECTION_LABELS["steps"])),
+                record_template=extract_labeled_text(section_lines, SECTION_LABELS["record_template"]),
+            )
+        )
+    return sections
+
+
+def normalize_lines(text: str) -> list[str]:
+    normalized = text.replace("\r", "\n").replace("；", "；\n")
+    return [line.strip() for line in normalized.splitlines() if line.strip()]
+
+
+def infer_project_table_titles(lines: list[str]) -> list[str]:
+    detail_titles = infer_detail_titles(lines)
+    if detail_titles:
+        return detail_titles
+    titles: list[str] = []
+    in_project_list = False
+    for line in lines:
+        if line == "测试项目列表":
+            in_project_list = True
+            continue
+        if in_project_list and line in {"测试项目", "测试项目详情"}:
+            continue
+        if in_project_list:
+            if line in BOUNDARY_LABELS:
+                break
+            if line.endswith("测试") and line not in titles:
+                titles.append(line)
+                continue
+            if titles and line == titles[0]:
+                break
+    if titles:
+        return titles
+    return [line for line in lines if line.endswith("测试") and line not in BOUNDARY_LABELS]
+
+
+def infer_detail_titles(lines: list[str]) -> list[str]:
+    titles: list[str] = []
+    objective_labels = set(SECTION_LABELS["objective"])
+    for index, line in enumerate(lines):
+        if not line.endswith("测试") or line in BOUNDARY_LABELS:
+            continue
+        lookahead = lines[index + 1 : index + 5]
+        if any(value in objective_labels for value in lookahead) and line not in titles:
+            titles.append(line)
+    return titles
+
+
+def find_line_index(lines: list[str], target: str, start: int = 0) -> int | None:
+    for index in range(start, len(lines)):
+        if lines[index] == target:
+            return index
+    return None
+
+
+def find_detail_line_index(lines: list[str], target: str) -> int | None:
+    matches = [index for index, line in enumerate(lines) if line == target]
+    if len(matches) >= 2:
+        return matches[1]
+    return matches[0] if matches else None
+
+
+def find_next_title_index(lines: list[str], titles: list[str], start: int) -> int | None:
+    for index in range(start, len(lines)):
+        if lines[index] in titles:
+            return index
+    return None
+
+
+def extract_labeled_text(lines: list[str], labels: list[str]) -> str:
+    start = next((index for index, line in enumerate(lines) if line in labels), None)
+    if start is None:
+        return ""
+    collected: list[str] = []
+    for line in lines[start + 1 :]:
+        if line in BOUNDARY_LABELS:
+            break
+        collected.append(line)
+    return "\n".join(collected).strip()
+
+
+def split_list_text(text: str) -> list[str]:
+    if not text:
+        return []
+    values: list[str] = []
+    for line in text.replace("；", "\n").replace(";", "\n").splitlines():
+        item = line.strip(" ；;、")
+        if item and item not in values and item != "/":
+            values.append(item)
+    return values
+
+
+def build_test_item(project_id: str, document_id: str, filename: str, title: str, section: ExtractedTestSection | None = None) -> TestItemAsset:
+    objective = section.objective if section and section.objective else f"验证{title}满足需求和风险控制要求。"
+    method = section.method if section and section.method else "基于验证方案章节拆分生成，后续由测试工程师确认方法和标准。"
+    tools = section.tools if section and section.tools else ["DNBSEQ-G99", "RFID 标签", "测试工装"]
+    steps = section.steps if section and section.steps else ["准备 DUT 和测试环境", f"执行{title}", "记录结果并判断是否符合验收标准"]
+    record_template = section.record_template if section and section.record_template else "记录样本编号、测试步骤、实际结果、判定结论和关联 BUG。"
     return TestItemAsset(
         id=f"item-{uuid4()}",
         project_id=project_id,
@@ -156,15 +327,32 @@ def build_test_item(project_id: str, document_id: str, title: str, evidence_text
         test_level="系统级" if "安规" in title or "EMC" in title else "子系统级",
         test_type=infer_test_type(title),
         risk_tags=["供应商变更", "兼容性"],
-        objective=f"验证{title}满足需求和风险控制要求。",
-        method="基于验证方案章节拆分生成，后续由测试工程师确认方法和标准。",
-        tools=["DNBSEQ-G99", "RFID 标签", "测试工装"],
-        steps=["准备 DUT 和测试环境", f"执行{title}", "记录结果并判断是否符合验收标准"],
-        record_template="记录样本编号、测试步骤、实际结果、判定结论和关联 BUG。",
-        evidence=evidence_text[:500],
+        objective=objective,
+        method=method,
+        tools=tools,
+        steps=steps,
+        record_template=record_template,
+        evidence=filename,
         status="draft",
         created_at=datetime.now(UTC),
     )
+
+
+def prefer_local_extracted_fields(item: TestItemAsset, filename: str, section: ExtractedTestSection | None) -> TestItemAsset:
+    if section is None:
+        return item.model_copy(update={"evidence": filename})
+    updates = {"evidence": filename}
+    if section.objective:
+        updates["objective"] = section.objective
+    if section.method:
+        updates["method"] = section.method
+    if section.tools:
+        updates["tools"] = section.tools
+    if section.steps:
+        updates["steps"] = section.steps
+    if section.record_template:
+        updates["record_template"] = section.record_template
+    return item.model_copy(update=updates)
 
 
 def infer_test_type(title: str) -> str:

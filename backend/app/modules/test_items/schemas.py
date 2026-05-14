@@ -24,6 +24,30 @@ class TestItemAsset(BaseModel):
     created_at: datetime
 
 
+class TestItemUpdate(BaseModel):
+    title: str | None = None
+    test_object: str | None = None
+    primary_subsystem: str | None = None
+    related_subsystems: list[str] | None = None
+    test_level: str | None = None
+    test_type: str | None = None
+    risk_tags: list[str] | None = None
+    objective: str | None = None
+    method: str | None = None
+    tools: list[str] | None = None
+    steps: list[str] | None = None
+    record_template: str | None = None
+
+
+class TestItemBulkDeleteRequest(BaseModel):
+    item_ids: list[str]
+
+
+class TestItemBulkDeleteResponse(BaseModel):
+    deleted_ids: list[str]
+    skipped: list[dict[str, str]]
+
+
 class SplitResult(BaseModel):
     document_id: str
     items: list[TestItemAsset]

@@ -4,11 +4,12 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 
-from app.core.config import get_settings
+from app.modules.admin.service import get_persisted_import_directory, save_import_directory
 from app.modules.auth.dependencies import get_current_user
 from app.modules.auth.seed_data import SeedUser
 from app.modules.documents.repository import (
     create_document,
+    delete_document,
     find_document_by_hash,
     get_document_content,
     get_document,
@@ -18,6 +19,8 @@ from app.modules.documents.repository import (
 )
 from app.modules.documents.schemas import (
     DocumentBatchUploadResponse,
+    DocumentBulkDeleteRequest,
+    DocumentBulkDeleteResponse,
     DocumentDirectoryScanResponse,
     DocumentImportConfigRead,
     DocumentImportConfigUpdate,
@@ -93,6 +96,7 @@ def update_import_config(
     if "admin" not in current_user.roles:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required")
     RUNTIME_IMPORT_CONFIG["import_directory"] = payload.import_directory.strip()
+    save_import_directory(payload.import_directory)
     return get_import_config(current_user)
 
 
@@ -149,8 +153,31 @@ def documents(
     return list_documents(project_id)
 
 
+@router.post("/bulk-delete", response_model=DocumentBulkDeleteResponse)
+def bulk_delete_documents(
+    payload: DocumentBulkDeleteRequest,
+    current_user: SeedUser = Depends(get_current_user),
+) -> DocumentBulkDeleteResponse:
+    deleted_ids: list[str] = []
+    skipped: list[dict[str, str]] = []
+    for document_id in dict.fromkeys(payload.document_ids):
+        document = get_document(document_id)
+        if document is None:
+            skipped.append({"document_id": document_id, "reason": "资料不存在"})
+            continue
+        if get_project_for_user(document.project_id, current_user) is None:
+            skipped.append({"document_id": document_id, "reason": "无项目访问权限"})
+            continue
+        if document.status == "published":
+            skipped.append({"document_id": document_id, "reason": "已发布资料不能直接删除"})
+            continue
+        if delete_document(document.id):
+            deleted_ids.append(document.id)
+    return DocumentBulkDeleteResponse(deleted_ids=deleted_ids, skipped=skipped)
+
+
 def get_import_directory() -> str:
-    return RUNTIME_IMPORT_CONFIG.get("import_directory", get_settings().document_import_directory).strip()
+    return RUNTIME_IMPORT_CONFIG.get("import_directory", get_persisted_import_directory()).strip()
 
 
 @router.get("/{document_id}", response_model=DocumentRead)
@@ -196,10 +223,7 @@ def review(
 
 
 def run_published_document_pipeline(document: DocumentRead) -> None:
-    document_type = document.labels.get("document_type") or next(
-        (suggestion.label_value for suggestion in document.label_suggestions if suggestion.label_key == "document_type"),
-        "",
-    )
+    document_type = infer_document_type(document)
     if document_type in {"Jira导出", "DFMEA"}:
         content = get_document_content(document.id)
         if content is not None:
@@ -219,3 +243,24 @@ def decode_content(content: bytes) -> str:
         return content.decode("utf-8")
     except UnicodeDecodeError:
         return ""
+
+
+def infer_document_type(document: DocumentRead) -> str:
+    document_type = document.labels.get("document_type") or next(
+        (suggestion.label_value for suggestion in document.label_suggestions if suggestion.label_key == "document_type"),
+        "",
+    )
+    if document_type:
+        return document_type
+    filename = document.filename.lower()
+    if "jira" in filename:
+        return "Jira导出"
+    if "dfmea" in filename:
+        return "DFMEA"
+    if "报告" in document.filename:
+        return "测试报告"
+    if "规范" in document.filename:
+        return "测试规范"
+    if "方案" in document.filename or "validation" in filename:
+        return "验证方案"
+    return ""

@@ -47,6 +47,7 @@ def test_generate_rfid_supplier_change_package() -> None:
     assert response.status_code == 200
     package = response.json()
     assert package["name"] == "RFID 供应商变更验证包"
+    assert len(package["items"]) == 5
     assert {item["relation_type"] for item in package["items"]} == {"required", "suggested", "conditional"}
 
 

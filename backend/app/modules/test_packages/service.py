@@ -45,7 +45,7 @@ def list_packages(project_id: str | None = None) -> list[TestPackageAsset]:
 
 
 def generate_rfid_supplier_change_package(project_id: str) -> TestPackageAsset:
-    items = [item for item in list_test_items(project_id) if item.test_object == "RFID" or "安规" in item.title]
+    items = [item for item in list_test_items(project_id) if is_rfid_related_item(item)]
     package_items = [
         TestPackageItem(
             test_item_id=item.id,
@@ -96,6 +96,23 @@ def relation_type_for_title(title: str) -> str:
     if "安规" in title or "EMC" in title:
         return "conditional"
     return "required"
+
+
+def is_rfid_related_item(item) -> bool:
+    searchable = " ".join(
+        [
+            item.title,
+            item.test_object,
+            item.primary_subsystem,
+            *item.related_subsystems,
+            *item.risk_tags,
+            item.objective,
+            item.method,
+            " ".join(item.steps),
+            item.evidence,
+        ]
+    ).lower()
+    return "rfid" in searchable or "安规" in item.title or "emc" in searchable
 
 
 def _use_sqlalchemy() -> bool:

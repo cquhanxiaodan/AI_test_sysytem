@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 from hashlib import sha256
 from uuid import uuid4
 
-from sqlalchemy import DateTime, Integer, JSON, String, select
+from sqlalchemy import DateTime, Integer, JSON, String, delete, select
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.config import get_settings
@@ -103,11 +103,20 @@ def get_document_content(document_id: str) -> bytes | None:
     return get_storage_backend().get_bytes(document.storage_path)
 
 
+def delete_document(document_id: str) -> bool:
+    if _use_sqlalchemy():
+        with session_scope() as session:
+            result = session.execute(delete(DocumentRecord).where(DocumentRecord.id == document_id))
+            return (result.rowcount or 0) > 0
+    return DOCUMENTS.pop(document_id, None) is not None
+
+
 def update_labels(document_id: str, labels: dict[str, str]) -> DocumentRead | None:
     document = get_document(document_id)
     if document is None:
         return None
-    updated = document.model_copy(update={"labels": labels, "status": "pending_review"})
+    next_status = "published" if document.status == "published" else "pending_review"
+    updated = document.model_copy(update={"labels": labels, "status": next_status})
     _save_document(updated)
     return updated
 

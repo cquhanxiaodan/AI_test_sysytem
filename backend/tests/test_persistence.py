@@ -3,7 +3,8 @@ from pathlib import Path
 
 from app.core.config import get_settings
 from app.core.database import Base, get_engine, init_database
-from app.modules.admin.service import AUDIT_EVENTS, create_audit_event, list_audit_events
+from app.modules.admin.schemas import SystemConfigUpdate
+from app.modules.admin.service import AUDIT_EVENTS, create_audit_event, get_config, list_audit_events, restore_config_backup, update_config
 from app.modules.ai.service import AI_RUNS, get_ai_run, record_ai_run
 from app.modules.documents.repository import create_document, get_document, get_document_content, list_documents
 from app.modules.parsing.service import get_task, list_chunks, run_parse_task
@@ -21,6 +22,7 @@ def configure_sqlite(tmp_path: Path) -> None:
     settings.storage_backend = "local"
     settings.database_url = f"sqlite:///{tmp_path / 'test.db'}"
     settings.local_storage_root = str(tmp_path / "storage")
+    settings.system_config_path = str(tmp_path / "storage" / "system-config.json")
     settings.validation_plan_template_path = str(tmp_path / "templates" / "validation-plan-v1.docx")
     Base.metadata.drop_all(bind=get_engine())
     init_database()
@@ -32,6 +34,7 @@ def restore_defaults() -> None:
     settings.storage_backend = "local"
     settings.database_url = "postgresql+psycopg://app:app@postgres:5432/gene_test"
     settings.local_storage_root = "storage"
+    settings.system_config_path = "storage/system-config.json"
     settings.validation_plan_template_path = "templates/validation-plan-v1.docx"
     ANALYSES.clear()
     AI_RUNS.clear()
@@ -143,6 +146,34 @@ def test_sqlalchemy_requirement_ai_and_audit_round_trip(tmp_path: Path) -> None:
         persisted_audits = list_audit_events()
         assert persisted_audits[0].id == audit.id
         assert persisted_audits[0].action == "publish"
+    finally:
+        restore_defaults()
+
+
+def test_sqlalchemy_system_config_round_trip(tmp_path: Path) -> None:
+    configure_sqlite(tmp_path)
+    try:
+        updated = update_config(SystemConfigUpdate(subsystem_catalog=["RFID", "流体系统"], test_types=["功能测试", "可靠性测试"]))
+
+        assert updated.subsystem_catalog == ["RFID", "流体系统"]
+        persisted = get_config()
+        assert persisted.subsystem_catalog == ["RFID", "流体系统"]
+        assert persisted.test_types == ["功能测试", "可靠性测试"]
+    finally:
+        restore_defaults()
+
+
+def test_sqlalchemy_system_config_restore_backup(tmp_path: Path) -> None:
+    configure_sqlite(tmp_path)
+    try:
+        update_config(SystemConfigUpdate(test_types=["功能测试", "可靠性测试"]))
+        update_config(SystemConfigUpdate(test_types=["误保存类型"]))
+
+        restored = restore_config_backup()
+
+        assert restored is not None
+        assert restored.test_types == ["功能测试", "可靠性测试"]
+        assert get_config().test_types == ["功能测试", "可靠性测试"]
     finally:
         restore_defaults()
 

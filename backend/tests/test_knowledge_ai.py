@@ -1,4 +1,5 @@
 from fastapi.testclient import TestClient
+from uuid import uuid4
 
 from app.main import app
 from app.modules.ai.service import RUNTIME_AI_CONFIG
@@ -11,6 +12,10 @@ client = TestClient(app)
 
 
 def setup_function() -> None:
+    from app.modules.admin import service as admin_service
+
+    admin_service.get_settings().repository_backend = "memory"
+    admin_service.get_settings().system_config_path = f"/tmp/monkeycode-test-system-config-{uuid4()}.json"
     RUNTIME_AI_CONFIG.clear()
     RISKS.clear()
     TEST_ITEMS.clear()
@@ -63,7 +68,10 @@ def test_ai_validation_reports_missing_fields() -> None:
     assert "缺少字段: confidence" in response.json()["errors"]
 
 
-def test_ai_config_reports_local_fallback_by_default() -> None:
+def test_ai_config_reports_local_fallback_by_default(tmp_path) -> None:
+    from app.modules.admin import service as admin_service
+
+    admin_service.get_settings().system_config_path = str(tmp_path / "system-config.json")
     response = client.get("/api/ai/config", headers=auth_headers())
 
     assert response.status_code == 200
@@ -94,6 +102,34 @@ def test_admin_can_update_ai_config() -> None:
     assert config["timeout_seconds"] == 30
     assert config["api_key_configured"] is True
     assert config["api_key_masked"] == "sk-t****cret"
+
+
+def test_ai_config_persists_to_settings_file(tmp_path) -> None:
+    from app.modules.admin import service as admin_service
+
+    admin_service.get_settings().system_config_path = str(tmp_path / "system-config.json")
+    response = client.put(
+        "/api/ai/config",
+        headers=auth_headers(),
+        json={
+            "provider": "openai-compatible",
+            "base_url": "https://model.example.com/v1",
+            "api_key": "sk-persisted-secret",
+            "model": "persisted-model",
+            "timeout_seconds": 35,
+        },
+    )
+    assert response.status_code == 200
+
+    RUNTIME_AI_CONFIG.clear()
+    persisted = client.get("/api/ai/config", headers=auth_headers())
+
+    assert persisted.status_code == 200
+    assert persisted.json()["configured"] is True
+    assert persisted.json()["base_url"] == "https://model.example.com/v1"
+    assert persisted.json()["model"] == "persisted-model"
+    assert persisted.json()["timeout_seconds"] == 35
+    assert persisted.json()["api_key_configured"] is True
 
 
 def test_non_admin_can_update_ai_config() -> None:

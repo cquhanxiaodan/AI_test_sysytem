@@ -3,6 +3,7 @@ import type { ColumnsType } from "antd/es/table";
 import type { UploadFile } from "antd/es/upload/interface";
 import { useEffect, useState } from "react";
 import {
+  bulkDeleteDocuments,
   DocumentDirectoryScanResult,
   DocumentItem,
   fetchDocumentImportConfig,
@@ -19,7 +20,7 @@ import {
 import { useProjects } from "../context/ProjectContext";
 
 export default function DocumentPoolPage() {
-  const { currentProject } = useProjects();
+  const { currentProject, projects } = useProjects();
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [editing, setEditing] = useState<DocumentItem | null>(null);
@@ -27,13 +28,13 @@ export default function DocumentPoolPage() {
   const [importDirectory, setImportDirectory] = useState("");
   const [lastScan, setLastScan] = useState<DocumentDirectoryScanResult | null>(null);
   const [batchFiles, setBatchFiles] = useState<UploadFile[]>([]);
+  const [selectedDocumentIds, setSelectedDocumentIds] = useState<React.Key[]>([]);
   const [form] = Form.useForm<Record<string, string>>();
 
   async function loadDocuments() {
-    if (!currentProject) return;
     setLoading(true);
     try {
-      setDocuments(await fetchDocuments(currentProject.id));
+      setDocuments(await fetchDocuments());
     } finally {
       setLoading(false);
     }
@@ -99,7 +100,14 @@ export default function DocumentPoolPage() {
 
   async function publishDocument(document: DocumentItem) {
     await reviewDocument(document.id, "publish", "前端审核通过");
-    message.success("资料已发布");
+    const documentType = document.labels.document_type || document.label_suggestions.find((suggestion) => suggestion.label_key === "document_type")?.label_value || "";
+    if (["验证方案", "测试规范", "测试报告"].includes(documentType)) {
+      message.success("资料已发布，系统已自动拆分测试条目；RFID 资料会同步生成归口包");
+    } else if (["Jira导出", "DFMEA"].includes(documentType)) {
+      message.success("资料已发布，系统已自动解析风险知识源");
+    } else {
+      message.success("资料已发布；请确认 document_type 标签后可触发对应资产沉淀流程");
+    }
     await loadDocuments();
   }
 
@@ -116,8 +124,22 @@ export default function DocumentPoolPage() {
     await loadDocuments();
   }
 
+  async function deleteSelectedDocuments() {
+    if (selectedDocumentIds.length === 0) return;
+    const result = await bulkDeleteDocuments(selectedDocumentIds.map(String));
+    setSelectedDocumentIds([]);
+    if (result.deleted_ids.length > 0) {
+      message.success(`已删除 ${result.deleted_ids.length} 个资料`);
+    }
+    if (result.skipped.length > 0) {
+      message.warning(`有 ${result.skipped.length} 个资料未删除，已发布资料会保留`);
+    }
+    await loadDocuments();
+  }
+
   const columns: ColumnsType<DocumentItem> = [
     { title: "文件名", dataIndex: "filename" },
+    { title: "所属项目", dataIndex: "project_id", render: (projectId) => projects.find((project) => project.id === projectId)?.name ?? projectId },
     { title: "状态", dataIndex: "status", render: (status) => <Tag color="blue">{status}</Tag> },
     {
       title: "系统建议标签",
@@ -168,6 +190,7 @@ export default function DocumentPoolPage() {
         </Upload>
         <Button disabled={!currentProject || batchFiles.length === 0} onClick={submitBatchUpload}>提交批量上传</Button>
         <Button disabled={!currentProject || !importDirectory} onClick={scanImportDirectory}>扫描新增资料</Button>
+        <Button danger disabled={selectedDocumentIds.length === 0} onClick={deleteSelectedDocuments}>删除选中资料</Button>
       </Space>
       <Card className="section-card">
         <Typography.Paragraph type="secondary">
@@ -175,7 +198,18 @@ export default function DocumentPoolPage() {
         </Typography.Paragraph>
       </Card>
       <Card>
-        <Table rowKey="id" loading={loading} columns={columns} dataSource={documents} pagination={false} />
+        <Table
+          rowKey="id"
+          loading={loading}
+          columns={columns}
+          dataSource={documents}
+          pagination={false}
+          rowSelection={{
+            selectedRowKeys: selectedDocumentIds,
+            onChange: setSelectedDocumentIds,
+            getCheckboxProps: (document) => ({ disabled: document.status === "published" }),
+          }}
+        />
       </Card>
       {lastTask && (
         <Card title="最近解析任务" className="section-card">

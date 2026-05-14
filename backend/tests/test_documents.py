@@ -1,4 +1,5 @@
 from fastapi.testclient import TestClient
+from uuid import uuid4
 
 from app.main import app
 from app.modules.documents.repository import DOCUMENTS, get_document_content
@@ -18,6 +19,12 @@ def auth_headers(username: str = "admin", password: str = "admin123") -> dict[st
 
 
 def setup_function() -> None:
+    from app.modules.admin import service as admin_service
+    from app.modules.documents.router import RUNTIME_IMPORT_CONFIG
+
+    admin_service.get_settings().repository_backend = "memory"
+    admin_service.get_settings().system_config_path = f"/tmp/monkeycode-test-system-config-{uuid4()}.json"
+    RUNTIME_IMPORT_CONFIG.clear()
     DOCUMENTS.clear()
     TASKS.clear()
     CHUNKS.clear()
@@ -106,6 +113,83 @@ def test_tester_cannot_update_import_directory() -> None:
     assert response.status_code == 403
 
 
+def test_import_directory_persists_to_settings_file(tmp_path) -> None:
+    from app.modules.admin import service as admin_service
+    from app.modules.documents.router import RUNTIME_IMPORT_CONFIG
+
+    admin_service.get_settings().system_config_path = str(tmp_path / "system-config.json")
+    import_dir = tmp_path / "imports"
+    import_dir.mkdir()
+
+    response = client.put(
+        "/api/documents/import-config",
+        headers=auth_headers(),
+        json={"import_directory": str(import_dir)},
+    )
+    assert response.status_code == 200
+
+    RUNTIME_IMPORT_CONFIG.clear()
+    persisted = client.get("/api/documents/import-config", headers=auth_headers())
+
+    assert persisted.status_code == 200
+    assert persisted.json() == {"import_directory": str(import_dir), "configured": True}
+
+
+def test_bulk_delete_removes_unpublished_documents() -> None:
+    headers = auth_headers()
+    first = client.post(
+        "/api/documents/upload",
+        headers=headers,
+        data={"project_id": "project-g99-rfid"},
+        files={"file": ("keep-out.txt", b"ignore me", "text/plain")},
+    ).json()["document"]
+    second = client.post(
+        "/api/documents/upload",
+        headers=headers,
+        data={"project_id": "project-g99-rfid"},
+        files={"file": ("also-ignore.txt", b"ignore me too", "text/plain")},
+    ).json()["document"]
+
+    response = client.post(
+        "/api/documents/bulk-delete",
+        headers=headers,
+        json={"document_ids": [first["id"], second["id"]]},
+    )
+
+    assert response.status_code == 200
+    assert set(response.json()["deleted_ids"]) == {first["id"], second["id"]}
+    remaining = client.get("/api/documents", headers=headers, params={"project_id": "project-g99-rfid"})
+    assert remaining.json() == []
+
+
+def test_bulk_delete_skips_published_documents() -> None:
+    headers = auth_headers()
+    upload = client.post(
+        "/api/documents/upload",
+        headers=headers,
+        data={"project_id": "project-g99-rfid"},
+        files={"file": ("RFID验证方案.docx", b"demo", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")},
+    )
+    document_id = upload.json()["document"]["id"]
+    client.patch(
+        f"/api/documents/{document_id}/labels",
+        headers=headers,
+        json={"labels": {"product_model": "DNBSEQ-G99", "subsystem": "RFID", "document_type": "验证方案"}},
+    )
+    client.post(f"/api/documents/{document_id}/review", headers=headers, json={"action": "publish"})
+
+    response = client.post(
+        "/api/documents/bulk-delete",
+        headers=headers,
+        json={"document_ids": [document_id]},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["deleted_ids"] == []
+    assert response.json()["skipped"] == [{"document_id": document_id, "reason": "已发布资料不能直接删除"}]
+    assert document_id in DOCUMENTS
+
+
 def test_document_label_update_moves_to_review() -> None:
     headers = auth_headers()
     upload = client.post(
@@ -168,6 +252,23 @@ def test_publish_validation_plan_auto_generates_test_assets() -> None:
     assert len(TEST_PACKAGES) == 1
 
 
+def test_publish_validation_plan_infers_type_from_filename() -> None:
+    headers = auth_headers()
+    upload = client.post(
+        "/api/documents/upload",
+        headers=headers,
+        data={"project_id": "project-g99-rfid"},
+        files={"file": ("DNBSEQ-G99 RFID验证方案.txt", b"RFID supplier change validation", "text/plain")},
+    )
+    document_id = upload.json()["document"]["id"]
+
+    response = client.post(f"/api/documents/{document_id}/review", headers=headers, json={"action": "publish"})
+
+    assert response.status_code == 200
+    assert len(TEST_ITEMS) == 5
+    assert len(TEST_PACKAGES) == 1
+
+
 def test_publish_jira_document_auto_parses_risks() -> None:
     headers = auth_headers()
     upload = client.post(
@@ -198,3 +299,24 @@ def test_tester_cannot_access_unassigned_project_upload() -> None:
     )
 
     assert response.status_code == 403
+
+
+def test_document_pool_list_is_global_when_project_filter_omitted() -> None:
+    headers = auth_headers()
+    first = client.post(
+        "/api/documents/upload",
+        headers=headers,
+        data={"project_id": "project-g99-rfid"},
+        files={"file": ("g99.txt", b"g99", "text/plain")},
+    ).json()["document"]
+    second = client.post(
+        "/api/documents/upload",
+        headers=headers,
+        data={"project_id": "project-mgi-platform"},
+        files={"file": ("platform.txt", b"platform", "text/plain")},
+    ).json()["document"]
+
+    response = client.get("/api/documents", headers=headers)
+
+    assert response.status_code == 200
+    assert {document["id"] for document in response.json()} == {first["id"], second["id"]}

@@ -61,6 +61,11 @@ export type DocumentDirectoryScanResult = {
   errors: string[];
 };
 
+export type DocumentBulkDeleteResult = {
+  deleted_ids: string[];
+  skipped: Array<{ document_id: string; reason: string }>;
+};
+
 export type ParsingTask = {
   id: string;
   document_id: string;
@@ -91,6 +96,16 @@ export type TestItemAsset = {
   evidence: string;
   status: string;
   created_at: string;
+};
+
+export type TestItemUpdate = Partial<Pick<
+  TestItemAsset,
+  "title" | "test_object" | "primary_subsystem" | "related_subsystems" | "test_level" | "test_type" | "risk_tags" | "objective" | "method" | "tools" | "steps" | "record_template"
+>>;
+
+export type TestItemBulkDeleteResult = {
+  deleted_ids: string[];
+  skipped: Array<{ item_id: string; reason: string }>;
 };
 
 export type TestPackageAsset = {
@@ -213,11 +228,14 @@ export type AcceptanceStatus = {
 export type SystemConfig = {
   subsystem_catalog: string[];
   document_types: string[];
+  test_levels: string[];
   test_types: string[];
   change_types: string[];
   ai_external_reference_enabled: boolean;
   validation_template_version: string;
 };
+
+export type SystemConfigUpdate = Partial<Pick<SystemConfig, "subsystem_catalog" | "document_types" | "test_levels" | "test_types" | "change_types">>;
 
 export type AiConfig = {
   provider: string;
@@ -392,6 +410,13 @@ export async function scanDocumentImportDirectory(projectId: string) {
   return response.json() as Promise<DocumentDirectoryScanResult>;
 }
 
+export async function bulkDeleteDocuments(documentIds: string[]) {
+  return request<DocumentBulkDeleteResult>("/api/documents/bulk-delete", {
+    method: "POST",
+    body: JSON.stringify({ document_ids: documentIds }),
+  });
+}
+
 export async function updateDocumentLabels(documentId: string, labels: Record<string, string>) {
   return request<DocumentItem>(`/api/documents/${documentId}/labels`, {
     method: "PATCH",
@@ -425,6 +450,20 @@ export async function splitDocumentToTestItems(documentId: string) {
 
 export async function confirmTestItem(itemId: string) {
   return request<TestItemAsset>(`/api/test-items/${itemId}/confirm`, { method: "POST" });
+}
+
+export async function updateTestItem(itemId: string, payload: TestItemUpdate) {
+  return request<TestItemAsset>(`/api/test-items/${itemId}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function bulkDeleteTestItems(itemIds: string[]) {
+  return request<TestItemBulkDeleteResult>("/api/test-items/bulk-delete", {
+    method: "POST",
+    body: JSON.stringify({ item_ids: itemIds }),
+  });
 }
 
 export async function fetchTestPackages(projectId?: string) {
@@ -547,6 +586,17 @@ export async function fetchAcceptanceStatus() {
 
 export async function fetchSystemConfig() {
   return request<SystemConfig>("/api/admin/config");
+}
+
+export async function updateSystemConfig(config: SystemConfigUpdate) {
+  return request<SystemConfig>("/api/admin/config", {
+    method: "PUT",
+    body: JSON.stringify(config),
+  });
+}
+
+export async function restoreSystemConfigBackup() {
+  return request<SystemConfig>("/api/admin/config/restore-backup", { method: "POST" });
 }
 
 export async function fetchAiConfig() {
