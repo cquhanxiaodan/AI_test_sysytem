@@ -171,3 +171,58 @@ def test_requirement_recommendations_merge_ai_with_local_sources(monkeypatch) ->
     assert response.status_code == 200
     titles = {item["title"] for item in response.json()["recommendations"]}
     assert "AI 补充 RFID 供应商变更回归测试" in titles
+
+
+def test_requirement_recommendation_review_crud() -> None:
+    headers = auth_headers()
+    seed_assets(headers)
+    created = client.post(
+        "/api/requirement-analyses",
+        headers=headers,
+        json={"project_id": "project-g99-rfid", "description": "DNBSEQ-G99 引入二供供应商康奈特 RFID"},
+    )
+    assert created.status_code == 200
+    analysis = created.json()
+    recommendation_id = analysis["recommendations"][0]["id"]
+
+    confirmed = client.patch(
+        f"/api/requirement-analyses/{analysis['id']}/recommendations/{recommendation_id}",
+        headers=headers,
+        json={"review_status": "confirmed"},
+    )
+    assert confirmed.status_code == 200
+    assert confirmed.json()["recommendations"][0]["review_status"] == "confirmed"
+
+    edited = client.patch(
+        f"/api/requirement-analyses/{analysis['id']}/recommendations/{recommendation_id}",
+        headers=headers,
+        json={"title": "已编辑 RFID 测试项", "reason": "人工修订"},
+    )
+    assert edited.status_code == 200
+    assert edited.json()["recommendations"][0]["title"] == "已编辑 RFID 测试项"
+
+    added = client.post(
+        f"/api/requirement-analyses/{analysis['id']}/recommendations",
+        headers=headers,
+        json={"group": "人工补充", "title": "人工新增 RFID 兼容性测试"},
+    )
+    assert added.status_code == 200
+    manual_item = added.json()["recommendations"][-1]
+    assert manual_item["source_type"] == "manual"
+    assert manual_item["review_status"] == "confirmed"
+
+    excluded = client.patch(
+        f"/api/requirement-analyses/{analysis['id']}/recommendations/{manual_item['id']}",
+        headers=headers,
+        json={"review_status": "excluded"},
+    )
+    assert excluded.status_code == 200
+    assert excluded.json()["recommendations"][-1]["review_status"] == "excluded"
+
+    deleted = client.delete(
+        f"/api/requirement-analyses/{analysis['id']}/recommendations/{manual_item['id']}",
+        headers=headers,
+    )
+    assert deleted.status_code == 200
+    ids = {item["id"] for item in deleted.json()["recommendations"]}
+    assert manual_item["id"] not in ids

@@ -21,6 +21,7 @@ from app.modules.risks.service import list_risks
 from app.modules.test_packages.service import list_packages
 
 ANALYSES: dict[str, RequirementAnalysisRead] = {}
+ALLOWED_RECOMMENDATION_STATUSES = {"pending", "confirmed", "excluded"}
 
 REQUIRED_REQUIREMENT_FIELDS = ["需求标题", "产品型号", "变更对象", "变更背景", "变更内容"]
 OPTIONAL_REQUIREMENT_FIELDS = ["所属子系统", "变更类型", "影响范围", "验收标准", "已知风险"]
@@ -169,6 +170,54 @@ def get_analysis(analysis_id: str) -> RequirementAnalysisRead | None:
             record = session.get(RequirementAnalysisRecord, analysis_id)
             return _record_to_analysis(record) if record is not None else None
     return ANALYSES.get(analysis_id)
+
+
+def add_recommendation(analysis_id: str, payload: RequirementRecommendationCreate) -> RequirementAnalysisRead | None:
+    analysis = get_analysis(analysis_id)
+    if analysis is None:
+        return None
+    recommendation = RequirementRecommendation(id=f"rec-{uuid4()}", **payload.model_dump())
+    if recommendation.review_status not in ALLOWED_RECOMMENDATION_STATUSES:
+        recommendation.review_status = "confirmed"
+    analysis.recommendations.append(recommendation)
+    analysis.status = "ready_for_review"
+    _save_analysis(analysis)
+    return analysis
+
+
+def update_recommendation(
+    analysis_id: str,
+    recommendation_id: str,
+    payload: RequirementRecommendationUpdate,
+) -> RequirementAnalysisRead | None:
+    analysis = get_analysis(analysis_id)
+    if analysis is None:
+        return None
+    for index, recommendation in enumerate(analysis.recommendations):
+        if recommendation.id != recommendation_id:
+            continue
+        updates = payload.model_dump(exclude_unset=True)
+        if "review_status" in updates and updates["review_status"] not in ALLOWED_RECOMMENDATION_STATUSES:
+            raise ValueError("Invalid recommendation review_status")
+        updated = recommendation.model_copy(update=updates)
+        analysis.recommendations[index] = updated
+        analysis.status = "ready_for_review"
+        _save_analysis(analysis)
+        return analysis
+    return None
+
+
+def delete_recommendation(analysis_id: str, recommendation_id: str) -> RequirementAnalysisRead | None:
+    analysis = get_analysis(analysis_id)
+    if analysis is None:
+        return None
+    original_count = len(analysis.recommendations)
+    analysis.recommendations = [item for item in analysis.recommendations if item.id != recommendation_id]
+    if len(analysis.recommendations) == original_count:
+        return None
+    analysis.status = "ready_for_review"
+    _save_analysis(analysis)
+    return analysis
 
 
 def list_analyses(project_id: str) -> list[RequirementAnalysisRead]:

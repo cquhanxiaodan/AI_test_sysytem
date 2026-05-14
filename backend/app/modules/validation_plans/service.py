@@ -88,7 +88,8 @@ def _build_plan(project_id: str, analyses: list) -> ValidationPlanRead:
     all_items: list[ValidationPlanItem] = []
     seen_titles: set[str] = set()
     for analysis in analyses:
-        for recommendation in analysis.recommendations:
+        recommendations = select_plan_recommendations(analysis.recommendations)
+        for recommendation in recommendations:
             if recommendation.title in seen_titles:
                 continue
             seen_titles.add(recommendation.title)
@@ -119,6 +120,13 @@ def _build_plan(project_id: str, analyses: list) -> ValidationPlanRead:
     )
     _save_plan(plan)
     return plan
+
+
+def select_plan_recommendations(recommendations: list) -> list:
+    confirmed = [item for item in recommendations if item.review_status == "confirmed"]
+    if confirmed:
+        return confirmed
+    return [item for item in recommendations if item.review_status == "pending"]
 
 
 def get_plan(plan_id: str) -> ValidationPlanRead | None:

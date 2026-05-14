@@ -163,12 +163,14 @@ def test_sqlalchemy_validation_plan_repository_round_trip(tmp_path: Path) -> Non
             ),
             recommendations=[
                 RequirementRecommendation(
+                    id="rec-1",
                     group="必测",
                     title="RFID 在机读取测试",
                     source_type="test_item",
                     source_id="item-1",
                     reason="覆盖读取功能",
                     evidence="历史验证方案",
+                    review_status="confirmed",
                 )
             ],
             status="draft",

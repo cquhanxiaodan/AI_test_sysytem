@@ -9,17 +9,22 @@ from app.modules.requirements.schemas import (
     RequirementBatchItem,
     RequirementBatchUploadResponse,
     RequirementDocumentUploadResponse,
+    RequirementRecommendationCreate,
+    RequirementRecommendationUpdate,
     RequirementTemplateField,
     RequirementTemplateRead,
 )
 from app.modules.requirements.service import (
+    add_recommendation,
     build_requirement_template_csv,
     create_analysis,
+    delete_recommendation,
     extract_requirement_description,
     get_analysis,
     get_requirement_template_fields,
     get_requirement_template_sample_rows,
     parse_requirement_table,
+    update_recommendation,
 )
 
 router = APIRouter(prefix="/requirement-analyses", tags=["requirement-analyses"])
@@ -92,4 +97,47 @@ def detail(analysis_id: str, current_user: SeedUser = Depends(get_current_user))
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Analysis not found")
     if get_project_for_user(analysis.project_id, current_user) is None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Project access denied")
+    return analysis
+
+
+@router.post("/{analysis_id}/recommendations", response_model=RequirementAnalysisRead)
+def create_recommendation(
+    analysis_id: str,
+    payload: RequirementRecommendationCreate,
+    current_user: SeedUser = Depends(get_current_user),
+) -> RequirementAnalysisRead:
+    detail(analysis_id, current_user)
+    analysis = add_recommendation(analysis_id, payload)
+    if analysis is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Analysis not found")
+    return analysis
+
+
+@router.patch("/{analysis_id}/recommendations/{recommendation_id}", response_model=RequirementAnalysisRead)
+def patch_recommendation(
+    analysis_id: str,
+    recommendation_id: str,
+    payload: RequirementRecommendationUpdate,
+    current_user: SeedUser = Depends(get_current_user),
+) -> RequirementAnalysisRead:
+    detail(analysis_id, current_user)
+    try:
+        analysis = update_recommendation(analysis_id, recommendation_id, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    if analysis is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Recommendation not found")
+    return analysis
+
+
+@router.delete("/{analysis_id}/recommendations/{recommendation_id}", response_model=RequirementAnalysisRead)
+def remove_recommendation(
+    analysis_id: str,
+    recommendation_id: str,
+    current_user: SeedUser = Depends(get_current_user),
+) -> RequirementAnalysisRead:
+    detail(analysis_id, current_user)
+    analysis = delete_recommendation(analysis_id, recommendation_id)
+    if analysis is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Recommendation not found")
     return analysis

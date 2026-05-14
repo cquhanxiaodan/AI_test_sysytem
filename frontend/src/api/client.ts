@@ -128,10 +128,33 @@ export type RequirementAnalysis = {
     subsystem: string;
     missing_fields: string[];
   };
-  recommendations: Array<{ group: string; title: string; source_type: string; source_id: string; reason: string; evidence: string }>;
+  recommendations: RequirementRecommendation[];
   status: string;
   created_at: string;
 };
+
+export type RequirementRecommendation = {
+  id: string;
+  group: string;
+  title: string;
+  source_type: string;
+  source_id: string;
+  reason: string;
+  evidence: string;
+  review_status: string;
+};
+
+export type RequirementRecommendationCreate = {
+  group: string;
+  title: string;
+  source_type?: string;
+  source_id?: string;
+  reason?: string;
+  evidence?: string;
+  review_status?: string;
+};
+
+export type RequirementRecommendationUpdate = Partial<Omit<RequirementRecommendation, "id">>;
 
 export type RequirementTemplate = {
   fields: Array<{ name: string; required: boolean; description: string }>;
@@ -407,6 +430,30 @@ export async function createRequirementAnalysis(projectId: string, description: 
   return request<RequirementAnalysis>("/api/requirement-analyses", {
     method: "POST",
     body: JSON.stringify({ project_id: projectId, description }),
+  });
+}
+
+export async function createRequirementRecommendation(analysisId: string, payload: RequirementRecommendationCreate) {
+  return request<RequirementAnalysis>(`/api/requirement-analyses/${analysisId}/recommendations`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateRequirementRecommendation(
+  analysisId: string,
+  recommendationId: string,
+  payload: RequirementRecommendationUpdate,
+) {
+  return request<RequirementAnalysis>(`/api/requirement-analyses/${analysisId}/recommendations/${recommendationId}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteRequirementRecommendation(analysisId: string, recommendationId: string) {
+  return request<RequirementAnalysis>(`/api/requirement-analyses/${analysisId}/recommendations/${recommendationId}`, {
+    method: "DELETE",
   });
 }
 

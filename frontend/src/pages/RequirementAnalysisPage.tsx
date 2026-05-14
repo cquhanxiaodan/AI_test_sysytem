@@ -1,16 +1,20 @@
-import { Button, Card, Descriptions, Form, Input, List, Space, Table, Tag, Typography, Upload, message } from "antd";
+import { Button, Card, Descriptions, Form, Input, List, Modal, Select, Space, Table, Tag, Typography, Upload, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { UploadOutlined } from "@ant-design/icons";
 import { useEffect, useState } from "react";
 import {
+  createRequirementRecommendation,
   createRequirementAnalysis,
+  deleteRequirementRecommendation,
   downloadRequirementTemplate,
   fetchAiConfig,
   fetchRequirementTemplate,
   AiConfig,
   RequirementAnalysis,
   RequirementBatchUploadResult,
+  RequirementRecommendation,
   RequirementTemplate,
+  updateRequirementRecommendation,
   uploadRequirementTable,
 } from "../api/client";
 import { useProjects } from "../context/ProjectContext";
@@ -28,7 +32,18 @@ export default function RequirementAnalysisPage() {
   const [batchFile, setBatchFile] = useState<File | null>(null);
   const [template, setTemplate] = useState<RequirementTemplate | null>(null);
   const [aiConfig, setAiConfig] = useState<AiConfig | null>(null);
+  const [editingRecommendation, setEditingRecommendation] = useState<RequirementRecommendation | null>(null);
+  const [isRecommendationModalOpen, setIsRecommendationModalOpen] = useState(false);
   const [form] = Form.useForm<{ description: string }>();
+  const [recommendationForm] = Form.useForm<{
+    group: string;
+    title: string;
+    source_type: string;
+    source_id: string;
+    reason: string;
+    evidence: string;
+    review_status: string;
+  }>();
 
   useEffect(() => {
     fetchRequirementTemplate().then(setTemplate).catch(() => setTemplate(null));
@@ -66,6 +81,57 @@ export default function RequirementAnalysisPage() {
     link.download = "requirement-analysis-template.csv";
     link.click();
     window.URL.revokeObjectURL(url);
+  }
+
+  function openCreateRecommendation() {
+    setEditingRecommendation(null);
+    recommendationForm.setFieldsValue({
+      group: "人工补充",
+      title: "",
+      source_type: "manual",
+      source_id: "manual",
+      reason: "人工新增",
+      evidence: "人工新增推荐项",
+      review_status: "confirmed",
+    });
+    setIsRecommendationModalOpen(true);
+  }
+
+  function openEditRecommendation(item: RequirementRecommendation) {
+    setEditingRecommendation(item);
+    recommendationForm.setFieldsValue(item);
+    setIsRecommendationModalOpen(true);
+  }
+
+  async function saveRecommendation() {
+    if (!analysis) return;
+    const values = await recommendationForm.validateFields();
+    const updated = editingRecommendation
+      ? await updateRequirementRecommendation(analysis.id, editingRecommendation.id, values)
+      : await createRequirementRecommendation(analysis.id, values);
+    setAnalysis(updated);
+    setIsRecommendationModalOpen(false);
+    message.success(editingRecommendation ? "推荐项已更新" : "推荐项已新增");
+  }
+
+  async function setRecommendationStatus(item: RequirementRecommendation, reviewStatus: string) {
+    if (!analysis) return;
+    const updated = await updateRequirementRecommendation(analysis.id, item.id, { review_status: reviewStatus });
+    setAnalysis(updated);
+    message.success(reviewStatus === "confirmed" ? "推荐项已确认" : "推荐项已排除");
+  }
+
+  async function removeRecommendation(item: RequirementRecommendation) {
+    if (!analysis) return;
+    const updated = await deleteRequirementRecommendation(analysis.id, item.id);
+    setAnalysis(updated);
+    message.success("推荐项已删除");
+  }
+
+  function statusTag(status: string) {
+    const color = status === "confirmed" ? "green" : status === "excluded" ? "red" : "gold";
+    const label = status === "confirmed" ? "已确认" : status === "excluded" ? "已排除" : "待审核";
+    return <Tag color={color}>{label}</Tag>;
   }
 
   const batchColumns: ColumnsType<RequirementBatchUploadResult["items"][number]> = [
@@ -142,12 +208,19 @@ export default function RequirementAnalysisPage() {
           </Descriptions>
           <List
             className="section-card"
-            header="推荐测试条目"
+            header={<Space><span>推荐测试条目</span><Button size="small" onClick={openCreateRecommendation}>新增推荐项</Button></Space>}
             dataSource={analysis.recommendations}
             renderItem={(item) => (
-              <List.Item>
+              <List.Item
+                actions={[
+                  <Button key="confirm" size="small" type="link" onClick={() => setRecommendationStatus(item, "confirmed")}>确认</Button>,
+                  <Button key="exclude" size="small" type="link" danger onClick={() => setRecommendationStatus(item, "excluded")}>排除</Button>,
+                  <Button key="edit" size="small" type="link" onClick={() => openEditRecommendation(item)}>编辑</Button>,
+                  <Button key="delete" size="small" type="link" danger onClick={() => removeRecommendation(item)}>删除</Button>,
+                ]}
+              >
                 <List.Item.Meta
-                  title={<><Tag color="blue">{item.group}</Tag>{item.title}</>}
+                  title={<><Tag color="blue">{item.group}</Tag>{statusTag(item.review_status)}{item.title}</>}
                   description={`${item.reason}；依据：${item.evidence}`}
                 />
               </List.Item>
@@ -155,6 +228,43 @@ export default function RequirementAnalysisPage() {
           />
         </Card>
       )}
+      <Modal
+        title={editingRecommendation ? "编辑推荐项" : "新增推荐项"}
+        open={isRecommendationModalOpen}
+        onOk={saveRecommendation}
+        onCancel={() => setIsRecommendationModalOpen(false)}
+        destroyOnHidden
+      >
+        <Form form={recommendationForm} layout="vertical">
+          <Form.Item label="分组" name="group" rules={[{ required: true, message: "请输入分组" }]}> 
+            <Input placeholder="必测/建议/条件触发/人工补充" />
+          </Form.Item>
+          <Form.Item label="测试条目" name="title" rules={[{ required: true, message: "请输入测试条目" }]}> 
+            <Input />
+          </Form.Item>
+          <Form.Item label="状态" name="review_status" rules={[{ required: true, message: "请选择状态" }]}> 
+            <Select
+              options={[
+                { label: "待审核", value: "pending" },
+                { label: "已确认", value: "confirmed" },
+                { label: "已排除", value: "excluded" },
+              ]}
+            />
+          </Form.Item>
+          <Form.Item label="来源类型" name="source_type" rules={[{ required: true, message: "请输入来源类型" }]}> 
+            <Input />
+          </Form.Item>
+          <Form.Item label="来源 ID" name="source_id" rules={[{ required: true, message: "请输入来源 ID" }]}> 
+            <Input />
+          </Form.Item>
+          <Form.Item label="推荐原因" name="reason" rules={[{ required: true, message: "请输入推荐原因" }]}> 
+            <Input.TextArea rows={2} />
+          </Form.Item>
+          <Form.Item label="依据" name="evidence" rules={[{ required: true, message: "请输入依据" }]}> 
+            <Input.TextArea rows={3} />
+          </Form.Item>
+        </Form>
+      </Modal>
     </section>
   );
 }

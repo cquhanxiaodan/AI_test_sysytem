@@ -60,6 +60,18 @@ def create_analysis(headers: dict[str, str]) -> str:
     return response.json()["id"]
 
 
+def update_recommendation_status(headers: dict[str, str], analysis_id: str, index: int, review_status: str) -> dict:
+    analysis = client.get(f"/api/requirement-analyses/{analysis_id}", headers=headers).json()
+    recommendation_id = analysis["recommendations"][index]["id"]
+    response = client.patch(
+        f"/api/requirement-analyses/{analysis_id}/recommendations/{recommendation_id}",
+        headers=headers,
+        json={"review_status": review_status},
+    )
+    assert response.status_code == 200
+    return response.json()["recommendations"][index]
+
+
 def test_create_plan_from_project_batches_all_analyses() -> None:
     headers = auth_headers()
     seed_assets(headers)
@@ -119,3 +131,18 @@ def test_validation_plan_check_merges_ai_messages(monkeypatch) -> None:
     result = checked.json()
     assert "AI 提示需确认 RFID DUT 批次。" in result["warnings"]
     assert "AI 建议补充异常恢复记录。" in result["suggestions"]
+
+
+def test_validation_plan_uses_confirmed_recommendations_and_excludes_removed_items() -> None:
+    headers = auth_headers()
+    seed_assets(headers)
+    analysis_id = create_analysis(headers)
+    confirmed_item = update_recommendation_status(headers, analysis_id, 0, "confirmed")
+    excluded_item = update_recommendation_status(headers, analysis_id, 1, "excluded")
+
+    created = client.post("/api/validation-plans", headers=headers, json={"project_id": "project-g99-rfid"})
+
+    assert created.status_code == 200
+    titles = {item["title"] for item in created.json()["items"]}
+    assert confirmed_item["title"] in titles
+    assert excluded_item["title"] not in titles
