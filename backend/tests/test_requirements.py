@@ -2,6 +2,7 @@ from fastapi.testclient import TestClient
 from uuid import uuid4
 
 from app.main import app
+from app.modules.ai.schemas import AiTaskResult
 from app.modules.documents.repository import DOCUMENTS
 from app.modules.parsing.service import CHUNKS, TASKS
 from app.modules.requirements.service import ANALYSES
@@ -67,6 +68,75 @@ def test_requirement_analysis_recommends_rfid_package_and_risks() -> None:
     assert analysis["parse_result"]["test_object"] == "RFID"
     groups = {item["group"] for item in analysis["recommendations"]}
     assert {"必测", "建议", "条件触发", "风险补充"}.issubset(groups)
+
+
+def test_requirement_analysis_deduplicates_recommendations_by_title(monkeypatch) -> None:
+    headers = auth_headers()
+    seed_assets(headers)
+
+    def fake_search_project_knowledge(project_id, query):
+        from app.modules.knowledge.schemas import SearchResult
+
+        return [
+            SearchResult(
+                source_type="document_chunk",
+                source_id="chunk-duplicate",
+                title="RFID 在机读取测试",
+                text="重复命中的 RFID 在机读取测试",
+                score=1,
+            )
+        ]
+
+    monkeypatch.setattr("app.modules.requirements.service.search_project_knowledge", fake_search_project_knowledge)
+
+    response = client.post(
+        "/api/requirement-analyses/local",
+        headers=headers,
+        json={"project_id": "project-g99-rfid", "description": "DNBSEQ-G99 引入二供供应商康奈特 RFID"},
+    )
+
+    assert response.status_code == 200
+    titles = [item["title"] for item in response.json()["recommendations"]]
+    assert titles.count("RFID 在机读取测试") == 1
+
+
+def test_requirement_analysis_skips_package_knowledge_and_merges_similar_titles(monkeypatch) -> None:
+    headers = auth_headers()
+    seed_assets(headers)
+
+    def fake_search_project_knowledge(project_id, query):
+        from app.modules.knowledge.schemas import SearchResult
+
+        return [
+            SearchResult(
+                source_type="test_package",
+                source_id="pkg-duplicate",
+                title="RFID 供应商变更验证包",
+                text="整个归口包命中",
+                score=1,
+            ),
+            SearchResult(
+                source_type="document_chunk",
+                source_id="chunk-assembly",
+                title="整机装配测试",
+                text="同类装配测试命中",
+                score=1,
+            ),
+        ]
+
+    monkeypatch.setattr("app.modules.requirements.service.search_project_knowledge", fake_search_project_knowledge)
+
+    response = client.post(
+        "/api/requirement-analyses/local",
+        headers=headers,
+        json={"project_id": "project-g99-rfid", "description": "DNBSEQ-G99 引入二供供应商康奈特 RFID"},
+    )
+
+    assert response.status_code == 200
+    titles = [item["title"] for item in response.json()["recommendations"]]
+    assert "RFID 供应商变更验证包" not in titles
+    assert "整机装配测试" not in titles
+    assert "RFID 在机装配测试" in titles
 
 
 def test_upload_requirement_document_extracts_standard_description() -> None:
@@ -151,7 +221,7 @@ def test_requirement_recommendations_merge_ai_with_local_sources(monkeypatch) ->
     def fake_run_json_task(task_type, *args, **kwargs):
         if task_type == "requirement_recommendation":
             package_id = next(iter(TEST_PACKAGES.values())).id
-            return {
+            return AiTaskResult(output={
                 "required": [
                     {
                         "title": "AI 补充 RFID 供应商变更回归测试",
@@ -164,10 +234,10 @@ def test_requirement_recommendations_merge_ai_with_local_sources(monkeypatch) ->
                 "suggested": [],
                 "conditional": [],
                 "evidence": "本地归口包命中",
-            }
-        return None
+            }, status="succeeded", message="AI 调用成功。")
+        return AiTaskResult(output=None, status="not_configured", message="AI 未配置。")
 
-    monkeypatch.setattr("app.modules.requirements.service.run_json_task", fake_run_json_task)
+    monkeypatch.setattr("app.modules.requirements.service.run_json_task_detailed", fake_run_json_task)
 
     response = client.post(
         "/api/requirement-analyses",
@@ -178,6 +248,49 @@ def test_requirement_recommendations_merge_ai_with_local_sources(monkeypatch) ->
     assert response.status_code == 200
     titles = {item["title"] for item in response.json()["recommendations"]}
     assert "AI 补充 RFID 供应商变更回归测试" in titles
+
+
+def test_requirement_analysis_accepts_ai_generated_missing_test_items(monkeypatch) -> None:
+    headers = auth_headers()
+    seed_assets(headers)
+
+    def fake_run_json_task(task_type, *args, **kwargs):
+        if task_type == "requirement_recommendation":
+            return AiTaskResult(output={
+                "required": [
+                    {
+                        "title": "新增 DNBSEQ-G99 RFID 供应商兼容性测试",
+                        "source_type": "ai_generated",
+                        "source_id": "ai-missing-rfid-compatibility",
+                        "reason": "本地资产未覆盖该补测项",
+                        "evidence": "AI 识别缺失测试项",
+                    }
+                ],
+                "suggested": [],
+                "conditional": [],
+                "evidence": "AI 识别缺失测试项",
+            }, status="succeeded", message="AI 调用成功。")
+        return AiTaskResult(output=None, status="not_configured", message="AI 未配置。")
+
+    monkeypatch.setattr("app.modules.requirements.service.run_json_task_detailed", fake_run_json_task)
+
+    response = client.post(
+        "/api/requirement-analyses",
+        headers=headers,
+        json={"project_id": "project-g99-rfid", "description": "DNBSEQ-G99 引入二供供应商康奈特 RFID"},
+    )
+
+    assert response.status_code == 200
+    recommendations = response.json()["recommendations"]
+    assert any(
+        item["group"] == "AI识别推荐测试项"
+        and item["source_type"] == "ai_generated"
+        and item["title"] == "新增 DNBSEQ-G99 RFID 供应商兼容性测试"
+        and item["objective"]
+        and item["method"]
+        and item["record_template"]
+        for item in recommendations
+    )
 
 
 def test_requirement_recommendation_review_crud() -> None:

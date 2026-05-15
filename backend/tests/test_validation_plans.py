@@ -146,3 +146,17 @@ def test_validation_plan_uses_confirmed_recommendations_and_excludes_removed_ite
     titles = {item["title"] for item in created.json()["items"]}
     assert confirmed_item["title"] in titles
     assert excluded_item["title"] not in titles
+
+
+def test_validation_plan_items_carry_requirement_fields() -> None:
+    headers = auth_headers()
+    seed_assets(headers)
+    create_analysis(headers)
+
+    created = client.post("/api/validation-plans", headers=headers, json={"project_id": "project-g99-rfid"})
+
+    assert created.status_code == 200
+    item = created.json()["items"][0]
+    assert item["objective"]
+    assert item["method"]
+    assert item["record_template"]

@@ -98,9 +98,9 @@ def _build_plan(project_id: str, analyses: list) -> ValidationPlanRead:
                     sequence=len(all_items) + 1,
                     title=recommendation.title,
                     group=recommendation.group,
-                    objective=f"验证{recommendation.title}满足需求。",
-                    method="按既有验证方案模板执行测试步骤并记录结果。",
-                    record_template="记录样本编号、测试条件、实际结果、判定结论和关联 BUG。",
+                    objective=recommendation.objective or f"验证{recommendation.title}满足需求。",
+                    method=recommendation.method or "按既有验证方案模板执行测试步骤并记录结果。",
+                    record_template=recommendation.record_template or "记录样本编号、测试条件、实际结果、判定结论和关联 BUG。",
                     evidence=recommendation.evidence,
                 )
             )

@@ -8,7 +8,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.config import get_settings
 from app.core.database import Base, session_scope
-from app.modules.ai.service import run_json_task
+from app.modules.ai.service import run_json_task, run_json_task_detailed
 from app.modules.knowledge.service import search_project_knowledge
 from app.modules.requirements.schemas import (
     RequirementAnalysisRead,
@@ -47,22 +47,48 @@ class RequirementAnalysisRecord(Base):
     description: Mapped[str] = mapped_column(Text)
     parse_result: Mapped[dict] = mapped_column(JSON)
     recommendations: Mapped[list[dict]] = mapped_column(JSON)
+    ai_status: Mapped[str] = mapped_column(String(80), default="not_configured")
+    ai_message: Mapped[str] = mapped_column(String(1000), default="AI 未配置，已使用本地规则推荐。")
     status: Mapped[str] = mapped_column(String(80), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
 def create_analysis(project_id: str, description: str) -> RequirementAnalysisRead:
-    parse_result = parse_requirement(description)
-    recommendations = build_recommendations(project_id, parse_result)
+    analysis = create_local_analysis(project_id, description)
+    return run_ai_recommendation(analysis.id) or analysis
+
+
+def create_local_analysis(project_id: str, description: str) -> RequirementAnalysisRead:
+    parse_result = parse_requirement_locally(description)
+    recommendations = build_local_recommendations(project_id, parse_result)
     analysis = RequirementAnalysisRead(
         id=f"analysis-{uuid4()}",
         project_id=project_id,
         description=description,
         parse_result=parse_result,
         recommendations=recommendations,
+        ai_status="pending",
+        ai_message="本地分析完成，等待 AI 补充分析。",
         status="ready_for_review",
         created_at=datetime.now(UTC),
     )
+    _save_analysis(analysis)
+    return analysis
+
+
+def run_ai_recommendation(analysis_id: str) -> RequirementAnalysisRead | None:
+    analysis = get_analysis(analysis_id)
+    if analysis is None:
+        return None
+    recommendations, ai_status, ai_message = enrich_recommendations_with_ai(
+        analysis.project_id,
+        analysis.parse_result,
+        analysis.recommendations,
+    )
+    analysis.recommendations = recommendations
+    analysis.ai_status = ai_status
+    analysis.ai_message = ai_message
+    analysis.status = "ready_for_review"
     _save_analysis(analysis)
     return analysis
 
@@ -233,6 +259,10 @@ def parse_requirement(description: str) -> RequirementParseResult:
     ai_result = parse_requirement_with_ai(description)
     if ai_result is not None:
         return ai_result
+    return parse_requirement_locally(description)
+
+
+def parse_requirement_locally(description: str) -> RequirementParseResult:
     lowered = description.lower()
     product_model = "DNBSEQ-G99" if "g99" in lowered or "dnbseq-g99" in lowered else None
     test_object = "RFID" if "rfid" in lowered else "待确认对象"
@@ -289,8 +319,15 @@ def parse_change_type(description: str) -> str:
     return "待确认变更类型"
 
 
-def build_recommendations(project_id: str, parse_result: RequirementParseResult) -> list[RequirementRecommendation]:
+def build_recommendations(project_id: str, parse_result: RequirementParseResult) -> tuple[list[RequirementRecommendation], str, str]:
+    recommendations = build_local_recommendations(project_id, parse_result)
+    enriched, ai_status, ai_message = enrich_recommendations_with_ai(project_id, parse_result, recommendations)
+    return enriched, ai_status, ai_message
+
+
+def build_local_recommendations(project_id: str, parse_result: RequirementParseResult) -> list[RequirementRecommendation]:
     recommendations: list[RequirementRecommendation] = []
+    query = build_requirement_search_query(parse_result)
     for package in list_packages(project_id):
         if package.test_object != parse_result.test_object or package.change_type != parse_result.change_type:
             continue
@@ -309,55 +346,117 @@ def build_recommendations(project_id: str, parse_result: RequirementParseResult)
                     source_id=package.id,
                     reason=f"匹配归口包：{package.name}",
                     evidence=package.evidence,
+                    objective=f"验证{item.title}满足归口包要求。",
+                    method=item.trigger_condition or "按归口包要求执行测试并记录结果。",
+                    record_template="记录测试条件、实际结果、判定结论和关联 BUG。",
                     review_status="pending",
                 )
             )
 
     for risk in list_risks(project_id=project_id, subsystem=parse_result.subsystem):
+            recommendations.append(
+                RequirementRecommendation(
+                    id=f"rec-{uuid4()}",
+                    group="风险补充",
+                    title=risk.suggested_test,
+                    source_type=risk.source_type,
+                    source_id=risk.id,
+                    reason=f"风险项：{risk.title}",
+                    evidence=risk.description,
+                    objective=f"验证{risk.suggested_test}在该风险场景下的表现。",
+                    method="按风险场景执行针对性验证并记录异常表现。",
+                    record_template="记录风险场景、触发条件、实际表现、判定结论和关联 BUG。",
+                    review_status="pending",
+                )
+            )
+
+    for knowledge in search_project_knowledge(project_id, query)[:10]:
+        if knowledge.source_type == "test_package":
+            continue
         recommendations.append(
             RequirementRecommendation(
                 id=f"rec-{uuid4()}",
-                group="风险补充",
-                title=risk.suggested_test,
-                source_type=risk.source_type,
-                source_id=risk.id,
-                reason=f"风险项：{risk.title}",
-                evidence=risk.description,
+                group="知识库补充",
+                title=knowledge.title,
+                source_type=knowledge.source_type,
+                source_id=knowledge.source_id,
+                reason="项目知识库检索命中",
+                evidence=knowledge.text,
+                objective="验证项目知识库命中内容对应的测试风险和覆盖项。",
+                method="结合知识库命中内容执行补充验证。",
+                record_template="记录知识库命中来源、验证场景、实际结果、判定结论和关联 BUG。",
                 review_status="pending",
             )
         )
 
-    return enrich_recommendations_with_ai(project_id, parse_result, recommendations) or recommendations
+    recommendations = deduplicate_recommendations(recommendations)
+    return recommendations
+
+
+def build_requirement_search_query(parse_result: RequirementParseResult) -> str:
+    return " ".join(
+        value
+        for value in [parse_result.product_model, parse_result.test_object, parse_result.subsystem, parse_result.change_type]
+        if value
+    )
+
+
+def deduplicate_recommendations(recommendations: list[RequirementRecommendation]) -> list[RequirementRecommendation]:
+    deduplicated: list[RequirementRecommendation] = []
+    seen_titles: set[str] = set()
+    for recommendation in recommendations:
+        key = recommendation_deduplication_key(recommendation)
+        if key in seen_titles:
+            continue
+        deduplicated.append(recommendation)
+        seen_titles.add(key)
+    return deduplicated
+
+
+def recommendation_deduplication_key(recommendation: RequirementRecommendation) -> str:
+    if recommendation.group == "风险补充":
+        return f"risk:{normalize_exact_title(recommendation.title)}"
+    return normalize_recommendation_title(recommendation.title)
+
+
+def normalize_exact_title(title: str) -> str:
+    return "".join(title.lower().split())
+
+
+def normalize_recommendation_title(title: str) -> str:
+    compact = normalize_exact_title(title)
+    for keyword in ["初始化", "装配", "读取", "写入", "兼容性", "安规emc", "emc"]:
+        if keyword in compact:
+            return keyword
+    return compact
 
 
 def enrich_recommendations_with_ai(
     project_id: str,
     parse_result: RequirementParseResult,
     local_recommendations: list[RequirementRecommendation],
-) -> list[RequirementRecommendation] | None:
-    query = " ".join(
-        value
-        for value in [parse_result.product_model, parse_result.test_object, parse_result.subsystem, parse_result.change_type]
-        if value
-    )
+) -> tuple[list[RequirementRecommendation], str, str]:
+    query = build_requirement_search_query(parse_result)
     knowledge = search_project_knowledge(project_id, query)[:10]
-    output = run_json_task(
+    result = run_json_task_detailed(
         "requirement_recommendation",
         "你是基因测序仪测试需求推荐助手。只输出 JSON，不输出解释。",
         (
-            "基于本地测试资产、归口包、风险和文档片段补充推荐。输出 required、suggested、conditional 三个数组和 evidence。"
-            "每个推荐项包含 title、source_type、source_id、reason、evidence。source_id 必须来自本地候选或知识检索结果。"
-            "不得编造来源，无法找到本地来源时不要新增推荐。"
+            "基于本地测试资产、归口包、风险和文档片段，只补充缺失测试项。不要输出本地已有测试项。输出 required、suggested、conditional 三个数组和 evidence。"
+            "每个推荐项包含 title、source_type、source_id、reason、evidence。"
+            "新增测试项统一使用 source_type=ai_generated，source_id 使用可区分的唯一字符串。"
+            "AI 推荐项在结果中统一标注为 AI识别推荐测试项。"
             f"\n需求解析：{parse_result.model_dump()}"
             f"\n本地推荐：{[item.model_dump() for item in local_recommendations]}"
             f"\n知识命中：{[item.model_dump() for item in knowledge]}"
         ),
     )
+    output = result.output
     if output is None:
-        return None
-    source_ids = {item.source_id for item in local_recommendations} | {item.source_id for item in knowledge}
+        return local_recommendations, result.status, result.message
     enriched = list(local_recommendations)
-    seen = {(item.title, item.source_id) for item in enriched}
+    seen_titles = {normalize_recommendation_title(item.title) for item in enriched}
+    ai_added_count = 0
     group_mapping = {"required": "必测", "suggested": "建议", "conditional": "条件触发"}
     for raw_group, group in group_mapping.items():
         raw_items = output.get(raw_group, [])
@@ -366,24 +465,35 @@ def enrich_recommendations_with_ai(
         for raw_item in raw_items:
             if not isinstance(raw_item, dict):
                 continue
-            source_id = str(raw_item.get("source_id") or "")
             title = str(raw_item.get("title") or "")
-            if not source_id or source_id not in source_ids or not title or (title, source_id) in seen:
+            source_type = "ai_generated"
+            source_id = str(raw_item.get("source_id") or f"ai:{uuid4()}")
+            title_key = normalize_recommendation_title(title)
+            if not title or title_key in seen_titles:
                 continue
             enriched.append(
                 RequirementRecommendation(
                     id=f"rec-{uuid4()}",
-                    group=group,
+                    group="AI识别推荐测试项",
                     title=title,
-                    source_type=str(raw_item.get("source_type") or "knowledge"),
+                    source_type=source_type,
                     source_id=source_id,
-                    reason=str(raw_item.get("reason") or "基于本地知识命中补充推荐"),
+                    reason=str(raw_item.get("reason") or "基于本地资产和知识检索补充的测试项"),
                     evidence=str(raw_item.get("evidence") or output.get("evidence") or "本地知识命中"),
+                    objective=str(raw_item.get("objective") or f"验证{title}满足变更需求。"),
+                    method=str(raw_item.get("method") or "按既有验证方案模板执行测试步骤并记录结果。"),
+                    record_template=str(
+                        raw_item.get("record_template")
+                        or "记录样本编号、测试条件、实际结果、判定结论和关联 BUG。"
+                    ),
                     review_status="pending",
                 )
             )
-            seen.add((title, source_id))
-    return enriched
+            seen_titles.add(title_key)
+            ai_added_count += 1
+    if ai_added_count == 0:
+        return enriched, "succeeded_no_items", "AI 调用成功，未识别到本地推荐之外的新增测试项。"
+    return enriched, "succeeded", f"AI 调用成功，新增 {ai_added_count} 个推荐测试项。"
 
 
 def _use_sqlalchemy() -> bool:
@@ -400,6 +510,8 @@ def _save_analysis(analysis: RequirementAnalysisRead) -> None:
                     description=analysis.description,
                     parse_result=analysis.parse_result.model_dump(),
                     recommendations=[recommendation.model_dump() for recommendation in analysis.recommendations],
+                    ai_status=analysis.ai_status,
+                    ai_message=analysis.ai_message,
                     status=analysis.status,
                     created_at=analysis.created_at,
                 )
@@ -415,6 +527,8 @@ def _record_to_analysis(record: RequirementAnalysisRecord) -> RequirementAnalysi
         description=record.description,
         parse_result=RequirementParseResult(**record.parse_result),
         recommendations=[RequirementRecommendation(**recommendation) for recommendation in (record.recommendations or [])],
+        ai_status=getattr(record, "ai_status", "not_configured"),
+        ai_message=getattr(record, "ai_message", "AI 未配置，已使用本地规则推荐。"),
         status=record.status,
         created_at=record.created_at,
     )

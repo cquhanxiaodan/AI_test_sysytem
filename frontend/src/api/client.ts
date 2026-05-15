@@ -178,6 +178,8 @@ export type RequirementAnalysis = {
     missing_fields: string[];
   };
   recommendations: RequirementRecommendation[];
+  ai_status: string;
+  ai_message: string;
   status: string;
   created_at: string;
 };
@@ -190,6 +192,9 @@ export type RequirementRecommendation = {
   source_id: string;
   reason: string;
   evidence: string;
+  objective?: string | null;
+  method?: string | null;
+  record_template?: string | null;
   review_status: string;
 };
 
@@ -200,6 +205,9 @@ export type RequirementRecommendationCreate = {
   source_id?: string;
   reason?: string;
   evidence?: string;
+  objective?: string | null;
+  method?: string | null;
+  record_template?: string | null;
   review_status?: string;
 };
 
@@ -317,6 +325,10 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   }
 
   return response.json() as Promise<T>;
+}
+
+function abortErrorMessage(error: unknown, fallback: string) {
+  return error instanceof DOMException && error.name === "AbortError" ? fallback : undefined;
 }
 
 export async function login(username: string, password: string) {
@@ -558,7 +570,7 @@ export async function bulkPublishRisks(riskIds: string[]) {
   });
 }
 
-export async function uploadRequirementTable(projectId: string, file: File) {
+export async function uploadRequirementTable(projectId: string, file: File, signal?: AbortSignal) {
   const token = getToken();
   const body = new FormData();
   body.append("project_id", projectId);
@@ -568,6 +580,7 @@ export async function uploadRequirementTable(projectId: string, file: File) {
     method: "POST",
     headers: token ? { Authorization: `Bearer ${token}` } : {},
     body,
+    signal,
   });
 
   if (!response.ok) {
@@ -594,11 +607,39 @@ export async function downloadRequirementTemplate() {
   return response.blob();
 }
 
-export async function createRequirementAnalysis(projectId: string, description: string) {
-  return request<RequirementAnalysis>("/api/requirement-analyses", {
-    method: "POST",
-    body: JSON.stringify({ project_id: projectId, description }),
-  });
+export async function createRequirementAnalysis(projectId: string, description: string, signal?: AbortSignal) {
+  try {
+    return await request<RequirementAnalysis>("/api/requirement-analyses", {
+      method: "POST",
+      body: JSON.stringify({ project_id: projectId, description }),
+      signal,
+    });
+  } catch (error) {
+    throw new Error(abortErrorMessage(error, "需求分析等待超时，后端可能仍在处理。请稍后刷新页面或检查 AI 配置。") ?? (error instanceof Error ? error.message : "需求分析失败"));
+  }
+}
+
+export async function createLocalRequirementAnalysis(projectId: string, description: string, signal?: AbortSignal) {
+  try {
+    return await request<RequirementAnalysis>("/api/requirement-analyses/local", {
+      method: "POST",
+      body: JSON.stringify({ project_id: projectId, description }),
+      signal,
+    });
+  } catch (error) {
+    throw new Error(abortErrorMessage(error, "本地分析超时，请检查本地资料量或后端服务状态。") ?? (error instanceof Error ? error.message : "本地分析失败"));
+  }
+}
+
+export async function runRequirementAiRecommendations(analysisId: string, signal?: AbortSignal) {
+  try {
+    return await request<RequirementAnalysis>(`/api/requirement-analyses/${analysisId}/ai-recommendations`, {
+      method: "POST",
+      signal,
+    });
+  } catch (error) {
+    throw new Error(abortErrorMessage(error, "AI 分析超时，请检查模型服务响应或缩短输入内容。") ?? (error instanceof Error ? error.message : "AI 分析失败"));
+  }
 }
 
 export async function createRequirementRecommendation(analysisId: string, payload: RequirementRecommendationCreate) {

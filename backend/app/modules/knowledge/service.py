@@ -1,5 +1,4 @@
 from app.modules.knowledge.schemas import SearchResult
-from app.modules.parsing.service import CHUNKS
 from app.modules.risks.service import list_risks
 from app.modules.test_items.service import list_test_items
 from app.modules.test_packages.service import list_packages
@@ -8,11 +7,6 @@ from app.modules.test_packages.service import list_packages
 def search_project_knowledge(project_id: str, query: str) -> list[SearchResult]:
     terms = [term.lower() for term in query.split() if term.strip()]
     candidates: list[SearchResult] = []
-
-    for chunks in CHUNKS.values():
-        for chunk in chunks:
-            if chunk.document_id and score_text(chunk.text, terms) > 0:
-                candidates.append(SearchResult(source_type="document_chunk", source_id=chunk.id, title=chunk.heading or "文档片段", text=chunk.text, score=score_text(chunk.text, terms)))
 
     for item in list_test_items(project_id):
         text = " ".join([item.title, item.objective, item.method, item.evidence])

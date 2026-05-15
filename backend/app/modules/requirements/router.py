@@ -18,12 +18,14 @@ from app.modules.requirements.service import (
     add_recommendation,
     build_requirement_template_csv,
     create_analysis,
+    create_local_analysis,
     delete_recommendation,
     extract_requirement_description,
     get_analysis,
     get_requirement_template_fields,
     get_requirement_template_sample_rows,
     parse_requirement_table,
+    run_ai_recommendation,
     update_recommendation,
 )
 
@@ -52,6 +54,22 @@ def create(payload: RequirementAnalysisRequest, current_user: SeedUser = Depends
     if get_project_for_user(payload.project_id, current_user) is None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Project access denied")
     return create_analysis(payload.project_id, payload.description)
+
+
+@router.post("/local", response_model=RequirementAnalysisRead)
+def create_local(payload: RequirementAnalysisRequest, current_user: SeedUser = Depends(get_current_user)) -> RequirementAnalysisRead:
+    if get_project_for_user(payload.project_id, current_user) is None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Project access denied")
+    return create_local_analysis(payload.project_id, payload.description)
+
+
+@router.post("/{analysis_id}/ai-recommendations", response_model=RequirementAnalysisRead)
+def create_ai_recommendations(analysis_id: str, current_user: SeedUser = Depends(get_current_user)) -> RequirementAnalysisRead:
+    detail(analysis_id, current_user)
+    analysis = run_ai_recommendation(analysis_id)
+    if analysis is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Analysis not found")
+    return analysis
 
 
 @router.post("/upload", response_model=RequirementDocumentUploadResponse)

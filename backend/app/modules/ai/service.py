@@ -11,7 +11,7 @@ from app.core.config import get_settings
 from app.core.database import Base, session_scope
 from app.modules.admin.schemas import AiSettingsConfig
 from app.modules.admin.service import get_persisted_ai_config, save_ai_settings
-from app.modules.ai.schemas import AiConfigRead, AiConfigUpdate, AiRunRecord
+from app.modules.ai.schemas import AiConfigRead, AiConfigUpdate, AiRunRecord, AiTaskResult
 
 AI_RUNS: dict[str, AiRunRecord] = {}
 RUNTIME_AI_CONFIG: dict[str, Any] = {}
@@ -116,9 +116,13 @@ def mask_secret(secret: str) -> str | None:
 
 
 def run_json_task(task_type: str, system_prompt: str, user_prompt: str) -> dict[str, Any] | None:
+    return run_json_task_detailed(task_type, system_prompt, user_prompt).output
+
+
+def run_json_task_detailed(task_type: str, system_prompt: str, user_prompt: str) -> AiTaskResult:
     provider, base_url, api_key, model, timeout_seconds = get_ai_runtime_values()
     if provider != "openai-compatible" or not (base_url and api_key and model):
-        return None
+        return AiTaskResult(output=None, status="not_configured", message="AI 未配置，已使用本地规则推荐。")
     url = f"{base_url.rstrip('/')}/chat/completions"
     payload = {
         "model": model,
@@ -138,20 +142,26 @@ def run_json_task(task_type: str, system_prompt: str, user_prompt: str) -> dict[
     try:
         with request.urlopen(req, timeout=timeout_seconds) as response:
             data = json.loads(response.read().decode("utf-8"))
-    except (TimeoutError, error.URLError, error.HTTPError, json.JSONDecodeError):
-        return None
+    except TimeoutError:
+        return AiTaskResult(output=None, status="failed", message="AI 调用超时，已使用本地规则推荐。")
+    except error.HTTPError as exc:
+        return AiTaskResult(output=None, status="failed", message=f"AI 调用失败，HTTP 状态码 {exc.code}。")
+    except error.URLError as exc:
+        return AiTaskResult(output=None, status="failed", message=f"AI 调用失败：{exc.reason}")
+    except json.JSONDecodeError:
+        return AiTaskResult(output=None, status="failed", message="AI 服务返回内容无法解析。")
 
     content = data.get("choices", [{}])[0].get("message", {}).get("content")
     if not isinstance(content, str):
-        return None
+        return AiTaskResult(output=None, status="failed", message="AI 服务响应中缺少文本内容。")
     try:
         output = json.loads(content)
     except json.JSONDecodeError:
-        return None
+        return AiTaskResult(output=None, status="failed", message="AI 输出不是合法 JSON。")
     if isinstance(output, dict):
         record_ai_run(task_type, output, model_name=model)
-        return output
-    return None
+        return AiTaskResult(output=output, status="succeeded", message="AI 调用成功。")
+    return AiTaskResult(output=None, status="failed", message="AI 输出结构不是对象。")
 
 
 def record_ai_run(task_type: str, output: dict[str, Any], model_name: str | None = None) -> AiRunRecord:

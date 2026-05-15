@@ -3,6 +3,8 @@ from uuid import uuid4
 
 from app.main import app
 from app.modules.ai.service import RUNTIME_AI_CONFIG
+from app.modules.parsing.schemas import DocumentChunk
+from app.modules.parsing.service import CHUNKS
 from app.modules.risks.service import RISKS
 from app.modules.test_items.service import TEST_ITEMS
 from app.modules.test_packages.service import TEST_PACKAGES
@@ -17,6 +19,7 @@ def setup_function() -> None:
     admin_service.get_settings().repository_backend = "memory"
     admin_service.get_settings().system_config_path = f"/tmp/monkeycode-test-system-config-{uuid4()}.json"
     RUNTIME_AI_CONFIG.clear()
+    CHUNKS.clear()
     RISKS.clear()
     TEST_ITEMS.clear()
     TEST_PACKAGES.clear()
@@ -44,6 +47,29 @@ def test_knowledge_search_returns_project_scoped_results() -> None:
 
     assert response.status_code == 200
     assert response.json()["results"][0]["source_type"] == "risk"
+
+
+def test_knowledge_search_excludes_document_chunks() -> None:
+    headers = auth_headers()
+    CHUNKS["doc-1"] = [
+        DocumentChunk(
+            id="chunk-1",
+            document_id="doc-1",
+            sequence=1,
+            heading="RFID 文档",
+            page_number=None,
+            text="RFID 文档切片不参与需求分析知识库检索",
+        )
+    ]
+
+    response = client.post(
+        "/api/knowledge/search",
+        headers=headers,
+        json={"project_id": "project-g99-rfid", "query": "RFID 文档切片"},
+    )
+
+    assert response.status_code == 200
+    assert all(item["source_type"] != "document_chunk" for item in response.json()["results"])
 
 
 def test_knowledge_search_denies_unassigned_project() -> None:

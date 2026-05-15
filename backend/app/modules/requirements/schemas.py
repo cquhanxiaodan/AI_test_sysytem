@@ -21,6 +21,9 @@ class RequirementRecommendation(BaseModel):
     source_id: str
     reason: str
     evidence: str
+    objective: str | None = None
+    method: str | None = None
+    record_template: str | None = None
     review_status: str = "pending"
 
 
@@ -41,6 +44,9 @@ class RequirementRecommendationCreate(BaseModel):
     source_id: str = "manual"
     reason: str = "人工新增"
     evidence: str = "人工新增推荐项"
+    objective: str | None = None
+    method: str | None = None
+    record_template: str | None = None
     review_status: str = "confirmed"
 
 
@@ -83,5 +89,7 @@ class RequirementAnalysisRead(BaseModel):
     description: str
     parse_result: RequirementParseResult
     recommendations: list[RequirementRecommendation]
+    ai_status: str = "not_configured"
+    ai_message: str = "AI 未配置，已使用本地规则推荐。"
     status: str
     created_at: datetime

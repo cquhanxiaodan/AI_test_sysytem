@@ -42,3 +42,9 @@ class AiRunRecord(BaseModel):
     valid: bool
     errors: list[str]
     created_at: datetime
+
+
+class AiTaskResult(BaseModel):
+    output: dict[str, Any] | None
+    status: str
+    message: str

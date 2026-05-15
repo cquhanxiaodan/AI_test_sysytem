@@ -1,10 +1,10 @@
-import { Button, Card, Descriptions, Form, Input, List, Modal, Select, Space, Table, Tag, Typography, Upload, message } from "antd";
+import { Alert, Button, Card, Descriptions, Form, Input, List, Modal, Select, Space, Spin, Table, Tag, Typography, Upload, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { UploadOutlined } from "@ant-design/icons";
 import { useEffect, useState } from "react";
 import {
   createRequirementRecommendation,
-  createRequirementAnalysis,
+  createLocalRequirementAnalysis,
   deleteRequirementRecommendation,
   downloadRequirementTemplate,
   fetchAiConfig,
@@ -14,6 +14,7 @@ import {
   RequirementBatchUploadResult,
   RequirementRecommendation,
   RequirementTemplate,
+  runRequirementAiRecommendations,
   updateRequirementRecommendation,
   uploadRequirementTable,
 } from "../api/client";
@@ -32,6 +33,10 @@ export default function RequirementAnalysisPage() {
   const [batchFile, setBatchFile] = useState<File | null>(null);
   const [template, setTemplate] = useState<RequirementTemplate | null>(null);
   const [aiConfig, setAiConfig] = useState<AiConfig | null>(null);
+  const [isLocalAnalyzing, setIsLocalAnalyzing] = useState(false);
+  const [isAiAnalyzing, setIsAiAnalyzing] = useState(false);
+  const [analysisStage, setAnalysisStage] = useState<"idle" | "local" | "ai_connecting" | "ai_running">("idle");
+  const [analysisSeconds, setAnalysisSeconds] = useState(0);
   const [editingRecommendation, setEditingRecommendation] = useState<RequirementRecommendation | null>(null);
   const [isRecommendationModalOpen, setIsRecommendationModalOpen] = useState(false);
   const [form] = Form.useForm<{ description: string }>();
@@ -50,20 +55,71 @@ export default function RequirementAnalysisPage() {
     fetchAiConfig().then(setAiConfig).catch(() => setAiConfig(null));
   }, []);
 
+  useEffect(() => {
+    if (!isLocalAnalyzing && !isAiAnalyzing) return;
+    const timer = window.setInterval(() => setAnalysisSeconds((seconds) => seconds + 1), 1000);
+    return () => window.clearInterval(timer);
+  }, [isLocalAnalyzing, isAiAnalyzing]);
+
   async function submit(values: { description: string }) {
     if (!currentProject) return;
-    if (batchFile) {
-      const result = await uploadRequirementTable(currentProject.id, batchFile);
-      setBatchResult(result);
-      setAnalysis(null);
-      const successCount = result.items.filter((item) => item.analysis).length;
-      message.success(`已分析 ${result.items.length} 条需求，其中 ${successCount} 条完成分析`);
-      return;
+    setIsLocalAnalyzing(true);
+    setAnalysisSeconds(0);
+    try {
+      if (batchFile) {
+        setAnalysisStage("local");
+        const result = await uploadRequirementTable(currentProject.id, batchFile);
+        setBatchResult(result);
+        setAnalysis(null);
+        const successCount = result.items.filter((item) => item.analysis).length;
+        message.success(`已分析 ${result.items.length} 条需求，其中 ${successCount} 条完成分析`);
+        return;
+      }
+      setAnalysisStage("local");
+      const localResult = await createLocalRequirementAnalysis(currentProject.id, values.description, AbortSignal.timeout(180000));
+      setAnalysis(localResult);
+      setBatchResult(null);
+      message.success("本地分析完成，可继续点击 AI 补充分析");
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "本地分析失败");
+    } finally {
+      setIsLocalAnalyzing(false);
+      setAnalysisStage("idle");
     }
-    const result = await createRequirementAnalysis(currentProject.id, values.description);
-    setAnalysis(result);
-    setBatchResult(null);
-    message.success("需求分析完成");
+  }
+
+  async function runAiAnalysis() {
+    if (!analysis) return;
+    setIsAiAnalyzing(true);
+    setAnalysisSeconds(0);
+    setAnalysisStage("ai_connecting");
+    const connectingTimer = window.setTimeout(() => {
+      setAnalysisStage((stage) => (stage === "ai_connecting" ? "ai_running" : stage));
+    }, 1000);
+    try {
+      const aiResult = await runRequirementAiRecommendations(analysis.id, AbortSignal.timeout(300000));
+      setAnalysis(aiResult);
+      message.success(aiResult.ai_message);
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "AI 补充分析失败");
+    } finally {
+      window.clearTimeout(connectingTimer);
+      setIsAiAnalyzing(false);
+      setAnalysisStage("idle");
+    }
+  }
+
+  function analysisStageText() {
+    if (analysisStage === "local") return "正在执行本地分析：检索归口包、风险库和项目知识库。最长等待 3 分钟。";
+    if (analysisStage === "ai_connecting") return "本地分析已完成，正在连接 AI 模型。连接阶段超过 1 分钟会报错。";
+    if (analysisStage === "ai_running") return "AI 已开始补充识别缺失测试项。分析阶段最长等待 5 分钟。";
+    return "准备分析。";
+  }
+
+  function aiStatusAlert(currentAnalysis: RequirementAnalysis) {
+    const status = currentAnalysis.ai_status;
+    const type = status === "failed" ? "warning" : status === "succeeded" ? "success" : "info";
+    return <Alert className="section-card" type={type} showIcon message="AI 分析状态" description={currentAnalysis.ai_message} />;
   }
 
   function handleTableUpload(file: File) {
@@ -185,7 +241,7 @@ export default function RequirementAnalysisPage() {
             <Input.TextArea rows={8} placeholder="例如：DNBSEQ-G99 同步引入二供供应商康奈特 RFID..." />
           </Form.Item>
           <Space wrap>
-            <Button type="primary" htmlType="submit">开始分析</Button>
+            <Button type="primary" htmlType="submit" loading={isLocalAnalyzing}>本地分析</Button>
             <Button onClick={handleTemplateDownload}>下载需求批量分析模版</Button>
             <Upload beforeUpload={handleTableUpload} showUploadList={false} accept=".csv">
               <Button icon={<UploadOutlined />}>{batchFile ? `已选择：${batchFile.name}` : "上传需求批量分析"}</Button>
@@ -200,6 +256,7 @@ export default function RequirementAnalysisPage() {
       )}
       {analysis && (
         <Card title="分析结果" className="section-card">
+          {aiStatusAlert(analysis)}
           <Descriptions column={2} size="small">
             <Descriptions.Item label="测试对象">{analysis.parse_result.test_object}</Descriptions.Item>
             <Descriptions.Item label="变更类型">{analysis.parse_result.change_type}</Descriptions.Item>
@@ -208,7 +265,15 @@ export default function RequirementAnalysisPage() {
           </Descriptions>
           <List
             className="section-card"
-            header={<Space><span>推荐测试条目</span><Button size="small" onClick={openCreateRecommendation}>新增推荐项</Button></Space>}
+            header={
+              <Space wrap>
+                <span>推荐测试条目</span>
+                <Button size="small" onClick={openCreateRecommendation}>新增推荐项</Button>
+                <Button size="small" type="primary" onClick={runAiAnalysis} loading={isAiAnalyzing} disabled={!analysis || isLocalAnalyzing}>
+                  AI 补充分析
+                </Button>
+              </Space>
+            }
             dataSource={analysis.recommendations}
             renderItem={(item) => (
               <List.Item
@@ -219,10 +284,25 @@ export default function RequirementAnalysisPage() {
                   <Button key="delete" size="small" type="link" danger onClick={() => removeRecommendation(item)}>删除</Button>,
                 ]}
               >
-                <List.Item.Meta
-                  title={<><Tag color="blue">{item.group}</Tag>{statusTag(item.review_status)}{item.title}</>}
-                  description={`${item.reason}；依据：${item.evidence}`}
-                />
+              <List.Item.Meta
+                title={
+                  <>
+                    <Tag color={item.source_type === "ai_generated" ? "purple" : "blue"}>{item.group}</Tag>
+                    {item.source_type === "ai_generated" && <Tag color="purple">AI新增</Tag>}
+                    {statusTag(item.review_status)}{item.title}
+                  </>
+                }
+                description={
+                  <Space direction="vertical" size={2}>
+                    <Typography.Text type="secondary">{item.reason}；依据：{item.evidence}</Typography.Text>
+                    {(item.objective || item.method || item.record_template) && (
+                      <Typography.Text type="secondary">
+                        方案字段：{item.objective ?? "未填写"} / {item.method ?? "未填写"} / {item.record_template ?? "未填写"}
+                      </Typography.Text>
+                    )}
+                  </Space>
+                }
+              />
               </List.Item>
             )}
           />
@@ -265,6 +345,18 @@ export default function RequirementAnalysisPage() {
           </Form.Item>
         </Form>
       </Modal>
+      {(isLocalAnalyzing || isAiAnalyzing) && (
+        <Modal open footer={null} closable={false} centered>
+          <Space direction="vertical" align="center" style={{ width: "100%" }}>
+            <Spin />
+            <Typography.Text>{analysisStageText()}</Typography.Text>
+            <Typography.Text type="secondary">已耗时：{analysisSeconds} 秒</Typography.Text>
+            {analysisStage === "local" && analysisSeconds > 30 && <Alert type="info" showIcon message="本地资料较多时可能需要更长时间，请等待本地结果返回。" />}
+            {analysisStage === "ai_connecting" && analysisSeconds > 20 && <Alert type="warning" showIcon message="AI 连接耗时较长，请检查模型服务地址、网络和 API Key 配置。" />}
+            {analysisStage === "ai_running" && analysisSeconds > 120 && <Alert type="warning" showIcon message="AI 正在分析缺失测试项，复杂需求可能耗时较长。" />}
+          </Space>
+        </Modal>
+      )}
     </section>
   );
 }

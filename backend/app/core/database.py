@@ -2,7 +2,7 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from app.core.config import get_settings
@@ -64,4 +64,23 @@ def init_database() -> None:
         ExportRecordModel,
         ValidationPlanRecord,
     )
-    Base.metadata.create_all(bind=get_engine())
+    engine = get_engine()
+    Base.metadata.create_all(bind=engine)
+    ensure_requirement_analysis_columns(engine)
+
+
+def ensure_requirement_analysis_columns(engine) -> None:
+    inspector = inspect(engine)
+    if "requirement_analyses" not in inspector.get_table_names():
+        return
+    existing_columns = {column["name"] for column in inspector.get_columns("requirement_analyses")}
+    statements = []
+    if "ai_status" not in existing_columns:
+        statements.append("ALTER TABLE requirement_analyses ADD COLUMN ai_status VARCHAR(80) DEFAULT 'not_configured'")
+    if "ai_message" not in existing_columns:
+        statements.append("ALTER TABLE requirement_analyses ADD COLUMN ai_message VARCHAR(1000) DEFAULT 'AI 未配置，已使用本地规则推荐。'")
+    if not statements:
+        return
+    with engine.begin() as connection:
+        for statement in statements:
+            connection.execute(text(statement))
