@@ -12,6 +12,7 @@ from app.modules.validation_plans.schemas import (
     ValidationPlanBulkDeleteResponse,
     ValidationPlanCheckResult,
     ValidationPlanCreateRequest,
+    ValidationPlanExportRequest,
     ValidationPlanRead,
     ValidationPlanStatusUpdate,
 )
@@ -91,9 +92,9 @@ def check(plan_id: str, current_user: SeedUser = Depends(get_current_user)) -> V
 
 
 @router.post("/{plan_id}/export", response_model=ExportRecord)
-def export(plan_id: str, current_user: SeedUser = Depends(get_current_user)) -> ExportRecord:
+def export(plan_id: str, payload: ValidationPlanExportRequest | None = None, current_user: SeedUser = Depends(get_current_user)) -> ExportRecord:
     detail(plan_id, current_user)
-    record = export_plan(plan_id)
+    record = export_plan(plan_id, payload.export_directory if payload is not None else "")
     if record is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Validation plan not found")
     return record

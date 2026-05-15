@@ -258,24 +258,20 @@ def test_validation_plans_can_be_bulk_deleted() -> None:
     assert remaining.json() == []
 
 
-def test_validation_plan_export_directory_config_is_used(tmp_path, monkeypatch) -> None:
+def test_validation_plan_export_directory_is_chosen_per_export(tmp_path) -> None:
     headers = auth_headers()
-    config_path = tmp_path / "settings.json"
     export_directory = tmp_path / "exports"
-    monkeypatch.setenv("SYSTEM_CONFIG_PATH", str(config_path))
     seed_assets(headers)
     analysis_id = create_analysis(headers)
     update_recommendation_status(headers, analysis_id, 0, "confirmed")
-    saved = client.put(
-        "/api/admin/validation-plan-export-config",
+    created = client.post("/api/validation-plans", headers=headers, json={"project_id": "project-g99-rfid"})
+
+    exported = client.post(
+        f"/api/validation-plans/{created.json()['id']}/export",
         headers=headers,
         json={"export_directory": str(export_directory)},
     )
-    created = client.post("/api/validation-plans", headers=headers, json={"project_id": "project-g99-rfid"})
 
-    exported = client.post(f"/api/validation-plans/{created.json()['id']}/export", headers=headers)
-
-    assert saved.status_code == 200
     assert exported.status_code == 200
     assert Path(exported.json()["storage_path"]).is_relative_to(export_directory)
     assert Path(exported.json()["storage_path"]).exists()

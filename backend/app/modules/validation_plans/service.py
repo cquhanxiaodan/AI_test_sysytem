@@ -7,7 +7,6 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.config import get_settings
 from app.core.database import Base, session_scope
-from app.modules.admin.service import get_persisted_validation_export_directory
 from app.modules.ai.service import run_json_task
 from app.modules.requirements.service import get_analysis, list_analyses
 from app.modules.validation_plans.docx_exporter import render_validation_plan_docx
@@ -239,15 +238,14 @@ def merge_messages(local_messages: list[str], ai_messages: object) -> list[str]:
     return merged
 
 
-def export_plan(plan_id: str) -> ExportRecord | None:
+def export_plan(plan_id: str, export_directory: str = "") -> ExportRecord | None:
     plan = get_plan(plan_id)
     if plan is None:
         return None
     export_id = f"export-{uuid4()}"
     settings = get_settings()
     filename = f"{plan.title}.docx"
-    export_directory = get_persisted_validation_export_directory()
-    output_root = Path(export_directory) if export_directory else Path(settings.local_storage_root) / "exports"
+    output_root = Path(export_directory.strip()) if export_directory.strip() else Path(settings.local_storage_root) / "exports"
     output_path = output_root / export_id / filename
     render_validation_plan_docx(plan, Path(settings.validation_plan_template_path), output_path)
     update_plan_status(plan_id, "exported")

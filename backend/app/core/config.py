@@ -26,7 +26,6 @@ class Settings(BaseSettings):
     local_storage_root: str = "storage"
     system_config_path: str = "storage/system-config.json"
     document_import_directory: str = ""
-    validation_plan_export_directory: str = ""
     validation_plan_template_path: str = "templates/validation-plan-v1.docx"
 
     ai_provider: str = "local"

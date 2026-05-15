@@ -1,7 +1,7 @@
-import { Button, Card, Empty, List, message, Modal, Select, Space, Table, Tag, Typography } from "antd";
+import { Button, Card, Empty, Form, Input, List, message, Modal, Select, Space, Table, Tag, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useState } from "react";
-import { bulkDeleteValidationPlans, checkValidationPlan, createValidationPlan, deleteValidationPlan, exportValidationPlan, fetchValidationPlanExportConfig, fetchValidationPlans, updateValidationPlanStatus, ValidationPlan, ValidationPlanCheckResult, ValidationPlanExportConfig } from "../api/client";
+import { bulkDeleteValidationPlans, checkValidationPlan, createValidationPlan, deleteValidationPlan, exportValidationPlan, fetchValidationPlans, updateValidationPlanStatus, ValidationPlan, ValidationPlanCheckResult } from "../api/client";
 import { useProjects } from "../context/ProjectContext";
 
 const PLAN_STATUSES = [
@@ -23,7 +23,8 @@ export default function ValidationPlansPage() {
   const [creating, setCreating] = useState(false);
   const [activePlan, setActivePlan] = useState<ValidationPlan | null>(null);
   const [selectedPlanIds, setSelectedPlanIds] = useState<React.Key[]>([]);
-  const [exportConfig, setExportConfig] = useState<ValidationPlanExportConfig | null>(null);
+  const [exportingPlan, setExportingPlan] = useState<ValidationPlan | null>(null);
+  const [exportForm] = Form.useForm<{ export_directory: string }>();
 
   async function loadPlans() {
     if (!currentProject) return;
@@ -38,12 +39,6 @@ export default function ValidationPlansPage() {
   useEffect(() => {
     loadPlans();
   }, [currentProject?.id]);
-
-  useEffect(() => {
-    fetchValidationPlanExportConfig()
-      .then(setExportConfig)
-      .catch((error: Error) => message.error(`读取导出目录配置失败：${error.message}`));
-  }, []);
 
   async function handleCreate() {
     if (!currentProject) return;
@@ -91,9 +86,16 @@ export default function ValidationPlansPage() {
     });
   }
 
-  async function exportPlan(plan: ValidationPlan) {
-    const result = await exportValidationPlan(plan.id);
+  function openExportDialog(plan: ValidationPlan) {
+    setExportingPlan(plan);
+    exportForm.setFieldsValue({ export_directory: "" });
+  }
+
+  async function exportPlan(values: { export_directory: string }) {
+    if (!exportingPlan) return;
+    const result = await exportValidationPlan(exportingPlan.id, values.export_directory);
     message.success(`已生成导出记录：${result.filename}`);
+    setExportingPlan(null);
     await loadPlans();
   }
 
@@ -165,7 +167,7 @@ export default function ValidationPlansPage() {
         <Space>
           <Button size="small" onClick={() => setActivePlan(plan)}>查看</Button>
           <Button size="small" onClick={() => checkPlan(plan)}>校验</Button>
-          <Button size="small" type="primary" onClick={() => exportPlan(plan)}>导出</Button>
+          <Button size="small" type="primary" onClick={() => openExportDialog(plan)}>导出</Button>
           <Button size="small" danger onClick={() => confirmDeletePlan(plan)}>删除</Button>
         </Space>
       ),
@@ -179,12 +181,8 @@ export default function ValidationPlansPage() {
         基于当前项目所有已分析需求批量生成整体验证方案，完成完整性校验后导出 Word。
       </Typography.Paragraph>
       <Card className="section-card">
-        <Typography.Text strong>当前导出目录：</Typography.Text>
-        <Typography.Text type="secondary">
-          {exportConfig?.export_directory || "默认本地存储 exports 目录"}
-        </Typography.Text>
-        <Typography.Paragraph type="secondary" style={{ marginTop: 8, marginBottom: 0 }}>
-          可在系统设置的“验证方案导出目录”中修改。状态支持草稿、评审中、已批准、已导出和已归档；导出成功后会自动切换为已导出。
+        <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
+          导出时可填写本次 Word 文件保存到后端服务器的目录；留空时使用默认本地存储 exports 目录。状态支持草稿、评审中、已批准、已导出和已归档；导出成功后会自动切换为已导出。
         </Typography.Paragraph>
       </Card>
       <Card>
@@ -228,6 +226,22 @@ export default function ValidationPlansPage() {
             />
           </>
         )}
+      </Modal>
+      <Modal
+        title="导出验证方案"
+        open={Boolean(exportingPlan)}
+        onCancel={() => setExportingPlan(null)}
+        okText="导出"
+        onOk={() => exportForm.submit()}
+      >
+        <Typography.Paragraph type="secondary">
+          请输入后端服务器上的保存目录。留空时使用默认本地存储 exports 目录。
+        </Typography.Paragraph>
+        <Form form={exportForm} layout="vertical" onFinish={exportPlan}>
+          <Form.Item name="export_directory" label="本次导出目录" extra="示例：/data/gene-test-exports。该路径需要后端服务进程可写。">
+            <Input placeholder="/data/gene-test-exports" />
+          </Form.Item>
+        </Form>
       </Modal>
     </section>
   );

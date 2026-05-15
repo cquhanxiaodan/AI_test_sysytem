@@ -54,11 +54,6 @@ export type DocumentImportConfig = {
   configured: boolean;
 };
 
-export type ValidationPlanExportConfig = {
-  export_directory: string;
-  configured: boolean;
-};
-
 export type DocumentDirectoryScanResult = {
   import_directory: string;
   imported: DocumentItem[];
@@ -447,17 +442,6 @@ export async function updateDocumentImportConfig(importDirectory: string) {
   });
 }
 
-export async function fetchValidationPlanExportConfig() {
-  return request<ValidationPlanExportConfig>("/api/admin/validation-plan-export-config");
-}
-
-export async function updateValidationPlanExportConfig(exportDirectory: string) {
-  return request<ValidationPlanExportConfig>("/api/admin/validation-plan-export-config", {
-    method: "PUT",
-    body: JSON.stringify({ export_directory: exportDirectory }),
-  });
-}
-
 export async function scanDocumentImportDirectory(projectId: string) {
   const token = getToken();
   const body = new FormData();
@@ -731,8 +715,11 @@ export async function checkValidationPlan(planId: string) {
   return request<ValidationPlanCheckResult>(`/api/validation-plans/${planId}/check`, { method: "POST" });
 }
 
-export async function exportValidationPlan(planId: string) {
-  return request<ExportRecord>(`/api/validation-plans/${planId}/export`, { method: "POST" });
+export async function exportValidationPlan(planId: string, exportDirectory = "") {
+  return request<ExportRecord>(`/api/validation-plans/${planId}/export`, {
+    method: "POST",
+    body: JSON.stringify({ export_directory: exportDirectory }),
+  });
 }
 
 export async function updateValidationPlanStatus(planId: string, status: string) {

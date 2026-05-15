@@ -1,17 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from pydantic import BaseModel
-
-from app.modules.admin.schemas import AcceptanceStatus, AuditEvent, AuditEventCreate, SystemConfig, SystemConfigUpdate, ValidationPlanExportConfig
-from app.modules.admin.service import create_audit_event, get_acceptance_status, get_config, get_validation_export_config, list_audit_events, restore_config_backup, save_validation_export_directory, update_config
+from app.modules.admin.schemas import AcceptanceStatus, AuditEvent, AuditEventCreate, SystemConfig, SystemConfigUpdate
+from app.modules.admin.service import create_audit_event, get_acceptance_status, get_config, list_audit_events, restore_config_backup, update_config
 from app.modules.auth.dependencies import get_current_user, require_admin
 from app.modules.auth.seed_data import SeedUser
 
 router = APIRouter(prefix="/admin", tags=["admin"])
-
-
-class ValidationPlanExportConfigUpdate(BaseModel):
-    export_directory: str = ""
 
 
 @router.get("/config", response_model=SystemConfig)
@@ -45,13 +39,3 @@ def create_audit(payload: AuditEventCreate, current_user: SeedUser = Depends(get
 @router.get("/acceptance-status", response_model=AcceptanceStatus)
 def acceptance_status(current_user: SeedUser = Depends(get_current_user)) -> AcceptanceStatus:
     return get_acceptance_status()
-
-
-@router.get("/validation-plan-export-config", response_model=ValidationPlanExportConfig)
-def validation_export_config(current_user: SeedUser = Depends(get_current_user)) -> ValidationPlanExportConfig:
-    return get_validation_export_config()
-
-
-@router.put("/validation-plan-export-config", response_model=ValidationPlanExportConfig)
-def update_validation_export_config(payload: ValidationPlanExportConfigUpdate, current_user: SeedUser = Depends(require_admin)) -> ValidationPlanExportConfig:
-    return save_validation_export_directory(payload.export_directory)

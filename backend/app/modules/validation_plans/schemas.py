@@ -32,6 +32,10 @@ class ValidationPlanCreateRequest(BaseModel):
     project_id: str | None = None
 
 
+class ValidationPlanExportRequest(BaseModel):
+    export_directory: str = ""
+
+
 class ValidationPlanStatusUpdate(BaseModel):
     status: str
 
