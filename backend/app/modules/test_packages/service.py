@@ -10,6 +10,7 @@ from app.modules.test_items.service import list_test_items
 from app.modules.test_packages.schemas import TestPackageAsset, TestPackageItem, TestPackageUpdate
 
 TEST_PACKAGES: dict[str, TestPackageAsset] = {}
+RFID_SUPPLIER_PACKAGE_NAME = "RFID 供应商变更验证包"
 
 
 class TestPackageRecord(Base):
@@ -58,7 +59,7 @@ def generate_rfid_supplier_change_package(project_id: str) -> TestPackageAsset:
     package = TestPackageAsset(
         id=f"pkg-{uuid4()}",
         project_id=project_id,
-        name="RFID 供应商变更验证包",
+        name=RFID_SUPPLIER_PACKAGE_NAME,
         package_type="变更归口",
         test_object="RFID",
         change_type="供应商变更",
@@ -69,8 +70,20 @@ def generate_rfid_supplier_change_package(project_id: str) -> TestPackageAsset:
         evidence="由 RFID 验证方案拆分条目自动归并生成。",
         created_at=datetime.now(UTC),
     )
+    existing = find_package_by_project_and_name(project_id, RFID_SUPPLIER_PACKAGE_NAME)
+    if existing is not None:
+        package = package.model_copy(update={"id": existing.id, "status": existing.status, "created_at": existing.created_at})
     _save_package(package)
     return package
+
+
+def find_package_by_project_and_name(project_id: str, name: str) -> TestPackageAsset | None:
+    normalized_name = normalize_package_name(name)
+    return next((package for package in list_packages(project_id) if normalize_package_name(package.name) == normalized_name), None)
+
+
+def normalize_package_name(name: str) -> str:
+    return "".join(name.lower().split())
 
 
 def publish_package(package_id: str) -> TestPackageAsset | None:

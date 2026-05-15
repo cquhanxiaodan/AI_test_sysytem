@@ -58,6 +58,27 @@ def test_generate_rfid_supplier_change_package() -> None:
     assert {item["relation_type"] for item in package["items"]} == {"required", "suggested", "conditional"}
 
 
+def test_generate_rfid_supplier_change_package_reuses_existing_package() -> None:
+    headers = auth_headers()
+    seed_rfid_items(headers)
+    first = client.post(
+        "/api/test-packages/generate-rfid-supplier-change?project_id=project-g99-rfid",
+        headers=headers,
+    ).json()
+    client.post(f"/api/test-packages/{first['id']}/publish", headers=headers)
+
+    second = client.post(
+        "/api/test-packages/generate-rfid-supplier-change?project_id=project-g99-rfid",
+        headers=headers,
+    )
+
+    assert second.status_code == 200
+    assert second.json()["id"] == first["id"]
+    assert second.json()["status"] == "published"
+    packages = client.get("/api/test-packages?project_id=project-g99-rfid", headers=headers).json()
+    assert len(packages) == 1
+
+
 def test_publish_test_package() -> None:
     headers = auth_headers()
     seed_rfid_items(headers)
@@ -115,8 +136,15 @@ def test_bulk_publish_test_packages() -> None:
         "/api/test-packages/generate-rfid-supplier-change?project_id=project-g99-rfid",
         headers=headers,
     ).json()
+    second_upload = client.post(
+        "/api/documents/upload",
+        headers=headers,
+        data={"project_id": "project-mgi-platform"},
+        files={"file": ("RFID验证方案.txt", b"RFID", "text/plain")},
+    )
+    client.post(f"/api/test-items/split/{second_upload.json()['document']['id']}", headers=headers)
     second = client.post(
-        "/api/test-packages/generate-rfid-supplier-change?project_id=project-g99-rfid",
+        "/api/test-packages/generate-rfid-supplier-change?project_id=project-mgi-platform",
         headers=headers,
     ).json()
 
