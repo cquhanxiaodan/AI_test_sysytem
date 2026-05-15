@@ -180,6 +180,40 @@ def delete_item(item_id: str) -> bool:
     return TEST_ITEMS.pop(item_id, None) is not None
 
 
+def create_item_from_fields(
+    project_id: str,
+    title: str,
+    test_object: str,
+    subsystem: str,
+    objective: str,
+    method: str,
+    record_template: str,
+    evidence: str,
+) -> TestItemAsset:
+    item = TestItemAsset(
+        id=f"item-{uuid4()}",
+        project_id=project_id,
+        source_document_id="ai-recommendation",
+        title=title,
+        test_object=test_object,
+        primary_subsystem=subsystem,
+        related_subsystems=[],
+        test_level="待确认层级",
+        test_type=infer_test_type(title),
+        risk_tags=["AI补充", "需求分析"],
+        objective=objective,
+        method=method,
+        tools=[],
+        steps=[f"执行{title}", "记录测试结果并判断是否符合验收标准"],
+        record_template=record_template,
+        evidence=evidence,
+        status="published",
+        created_at=datetime.now(UTC),
+    )
+    _save_item(item)
+    return item
+
+
 def get_item(item_id: str) -> TestItemAsset | None:
     if _use_sqlalchemy():
         with session_scope() as session:

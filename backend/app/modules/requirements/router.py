@@ -19,13 +19,17 @@ from app.modules.requirements.service import (
     build_requirement_template_csv,
     create_analysis,
     create_local_analysis,
+    delete_analysis,
     delete_recommendation,
     extract_requirement_description,
     get_analysis,
+    get_latest_analysis,
     get_requirement_template_fields,
     get_requirement_template_sample_rows,
+    include_recommendation_in_local_items,
     parse_requirement_table,
     run_ai_recommendation,
+    list_analyses,
     update_recommendation,
 )
 
@@ -61,6 +65,28 @@ def create_local(payload: RequirementAnalysisRequest, current_user: SeedUser = D
     if get_project_for_user(payload.project_id, current_user) is None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Project access denied")
     return create_local_analysis(payload.project_id, payload.description)
+
+
+@router.get("/latest", response_model=RequirementAnalysisRead | None)
+def latest(project_id: str, current_user: SeedUser = Depends(get_current_user)) -> RequirementAnalysisRead | None:
+    if get_project_for_user(project_id, current_user) is None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Project access denied")
+    return get_latest_analysis(project_id)
+
+
+@router.get("", response_model=list[RequirementAnalysisRead])
+def list_project_analyses(project_id: str, current_user: SeedUser = Depends(get_current_user)) -> list[RequirementAnalysisRead]:
+    if get_project_for_user(project_id, current_user) is None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Project access denied")
+    return list_analyses(project_id)
+
+
+@router.delete("/{analysis_id}", status_code=status.HTTP_204_NO_CONTENT)
+def remove_analysis(analysis_id: str, current_user: SeedUser = Depends(get_current_user)) -> Response:
+    detail(analysis_id, current_user)
+    if not delete_analysis(analysis_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Analysis not found")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("/{analysis_id}/ai-recommendations", response_model=RequirementAnalysisRead)
@@ -143,6 +169,19 @@ def patch_recommendation(
         analysis = update_recommendation(analysis_id, recommendation_id, payload)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    if analysis is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Recommendation not found")
+    return analysis
+
+
+@router.post("/{analysis_id}/recommendations/{recommendation_id}/include-local", response_model=RequirementAnalysisRead)
+def include_local(
+    analysis_id: str,
+    recommendation_id: str,
+    current_user: SeedUser = Depends(get_current_user),
+) -> RequirementAnalysisRead:
+    detail(analysis_id, current_user)
+    analysis = include_recommendation_in_local_items(analysis_id, recommendation_id)
     if analysis is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Recommendation not found")
     return analysis

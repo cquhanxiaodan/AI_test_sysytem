@@ -2,13 +2,17 @@ import { Alert, Button, Card, Descriptions, Form, Input, List, Modal, Select, Sp
 import type { ColumnsType } from "antd/es/table";
 import { UploadOutlined } from "@ant-design/icons";
 import { useEffect, useState } from "react";
+import type { Key } from "react";
 import {
   createRequirementRecommendation,
   createLocalRequirementAnalysis,
+  deleteRequirementAnalysis,
   deleteRequirementRecommendation,
   downloadRequirementTemplate,
   fetchAiConfig,
+  fetchRequirementAnalyses,
   fetchRequirementTemplate,
+  includeRequirementRecommendationInLocal,
   AiConfig,
   RequirementAnalysis,
   RequirementBatchUploadResult,
@@ -29,6 +33,8 @@ const STANDARD_REQUIREMENT_TEMPLATE = `需求标题：DNBSEQ-G99 RFID 二供供�
 export default function RequirementAnalysisPage() {
   const { currentProject } = useProjects();
   const [analysis, setAnalysis] = useState<RequirementAnalysis | null>(null);
+  const [analyses, setAnalyses] = useState<RequirementAnalysis[]>([]);
+  const [selectedAnalysisIds, setSelectedAnalysisIds] = useState<Key[]>([]);
   const [batchResult, setBatchResult] = useState<RequirementBatchUploadResult | null>(null);
   const [batchFile, setBatchFile] = useState<File | null>(null);
   const [template, setTemplate] = useState<RequirementTemplate | null>(null);
@@ -56,6 +62,36 @@ export default function RequirementAnalysisPage() {
   }, []);
 
   useEffect(() => {
+    if (!currentProject) return;
+    fetchRequirementAnalyses(currentProject.id)
+      .then((history) => {
+        setAnalyses(history);
+        setSelectedAnalysisIds((selectedIds) => selectedIds.filter((id) => history.some((item) => item.id === id)));
+        setAnalysis(history[0] ?? null);
+        if (history[0]) setBatchResult(null);
+      })
+      .catch(() => {
+        setAnalyses([]);
+        setAnalysis(null);
+      });
+  }, [currentProject]);
+
+  function refreshAnalyses(selectedAnalysis?: RequirementAnalysis) {
+    if (!currentProject) return;
+    fetchRequirementAnalyses(currentProject.id)
+      .then((history) => {
+        setAnalyses(history);
+        setSelectedAnalysisIds((selectedIds) => selectedIds.filter((id) => history.some((item) => item.id === id)));
+        if (selectedAnalysis) {
+          setAnalysis(history.find((item) => item.id === selectedAnalysis.id) ?? selectedAnalysis);
+          return;
+        }
+        setAnalysis((current) => history.find((item) => item.id === current?.id) ?? history[0] ?? null);
+      })
+      .catch(() => undefined);
+  }
+
+  useEffect(() => {
     if (!isLocalAnalyzing && !isAiAnalyzing) return;
     const timer = window.setInterval(() => setAnalysisSeconds((seconds) => seconds + 1), 1000);
     return () => window.clearInterval(timer);
@@ -78,6 +114,7 @@ export default function RequirementAnalysisPage() {
       setAnalysisStage("local");
       const localResult = await createLocalRequirementAnalysis(currentProject.id, values.description, AbortSignal.timeout(180000));
       setAnalysis(localResult);
+      refreshAnalyses(localResult);
       setBatchResult(null);
       message.success("本地分析完成，可继续点击 AI 补充分析");
     } catch (error) {
@@ -99,6 +136,7 @@ export default function RequirementAnalysisPage() {
     try {
       const aiResult = await runRequirementAiRecommendations(analysis.id, AbortSignal.timeout(300000));
       setAnalysis(aiResult);
+      refreshAnalyses(aiResult);
       message.success(aiResult.ai_message);
     } catch (error) {
       message.error(error instanceof Error ? error.message : "AI 补充分析失败");
@@ -166,6 +204,7 @@ export default function RequirementAnalysisPage() {
       ? await updateRequirementRecommendation(analysis.id, editingRecommendation.id, values)
       : await createRequirementRecommendation(analysis.id, values);
     setAnalysis(updated);
+    refreshAnalyses(updated);
     setIsRecommendationModalOpen(false);
     message.success(editingRecommendation ? "推荐项已更新" : "推荐项已新增");
   }
@@ -174,6 +213,7 @@ export default function RequirementAnalysisPage() {
     if (!analysis) return;
     const updated = await updateRequirementRecommendation(analysis.id, item.id, { review_status: reviewStatus });
     setAnalysis(updated);
+    refreshAnalyses(updated);
     message.success(reviewStatus === "confirmed" ? "推荐项已确认" : "推荐项已排除");
   }
 
@@ -181,7 +221,44 @@ export default function RequirementAnalysisPage() {
     if (!analysis) return;
     const updated = await deleteRequirementRecommendation(analysis.id, item.id);
     setAnalysis(updated);
+    refreshAnalyses(updated);
     message.success("推荐项已删除");
+  }
+
+  async function removeAnalysis(item: RequirementAnalysis) {
+    try {
+      await deleteRequirementAnalysis(item.id);
+      const nextAnalyses = analyses.filter((analysisItem) => analysisItem.id !== item.id);
+      setAnalyses(nextAnalyses);
+      setSelectedAnalysisIds((selectedIds) => selectedIds.filter((id) => id !== item.id));
+      if (analysis?.id === item.id) setAnalysis(nextAnalyses[0] ?? null);
+      message.success("历史分析结果已删除");
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "历史分析结果删除失败");
+    }
+  }
+
+  async function removeSelectedAnalyses() {
+    const selectedIds = new Set(selectedAnalysisIds.map(String));
+    try {
+      await Promise.all([...selectedIds].map((analysisId) => deleteRequirementAnalysis(analysisId)));
+      const nextAnalyses = analyses.filter((analysisItem) => !selectedIds.has(analysisItem.id));
+      setAnalyses(nextAnalyses);
+      setSelectedAnalysisIds([]);
+      if (analysis && selectedIds.has(analysis.id)) setAnalysis(nextAnalyses[0] ?? null);
+      message.success(`已删除 ${selectedIds.size} 条历史分析结果`);
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "批量删除历史分析结果失败");
+      refreshAnalyses();
+    }
+  }
+
+  async function includeLocalRecommendation(item: RequirementRecommendation) {
+    if (!analysis) return;
+    const updated = await includeRequirementRecommendationInLocal(analysis.id, item.id);
+    setAnalysis(updated);
+    refreshAnalyses(updated);
+    message.success("已纳入本地测试条目资产，并自动确认用于测试方案");
   }
 
   function statusTag(status: string) {
@@ -208,6 +285,55 @@ export default function RequirementAnalysisPage() {
     {
       title: "推荐数",
       render: (_, item) => item.analysis?.recommendations.length ?? "-",
+    },
+  ];
+
+  const analysisColumns: ColumnsType<RequirementAnalysis> = [
+    {
+      title: "创建时间",
+      dataIndex: "created_at",
+      width: 180,
+      render: (value: string) => new Date(value).toLocaleString(),
+    },
+    {
+      title: "需求摘要",
+      dataIndex: "description",
+      ellipsis: true,
+      render: (value: string) => value.split("\n")[0] || value.slice(0, 80),
+    },
+    {
+      title: "推荐项",
+      width: 190,
+      render: (_, item) => {
+        const confirmed = item.recommendations.filter((recommendation) => recommendation.review_status === "confirmed").length;
+        const pending = item.recommendations.filter((recommendation) => recommendation.review_status === "pending").length;
+        return <Space><Tag color="green">已确认 {confirmed}</Tag><Tag color="gold">待审核 {pending}</Tag></Space>;
+      },
+    },
+    {
+      title: "操作",
+      width: 150,
+      render: (_, item) => (
+        <Space>
+          <Button size="small" onClick={() => setAnalysis(item)}>查看</Button>
+          <Button
+            size="small"
+            danger
+            onClick={() => {
+              Modal.confirm({
+                title: "删除历史分析结果",
+                content: "删除后该分析结果和其中的推荐审核记录会从历史列表移除。",
+                okText: "删除",
+                okButtonProps: { danger: true },
+                cancelText: "取消",
+                onOk: () => removeAnalysis(item),
+              });
+            }}
+          >
+            删除
+          </Button>
+        </Space>
+      ),
     },
   ];
 
@@ -254,6 +380,47 @@ export default function RequirementAnalysisPage() {
           <Table rowKey="row_number" columns={batchColumns} dataSource={batchResult.items} pagination={false} />
         </Card>
       )}
+      {analyses.length > 0 && (
+        <Card title="历史分析结果" className="section-card">
+          <Alert
+            className="section-card"
+            type="info"
+            showIcon
+            message="测试方案只会使用已确认的推荐测试条目，待审核和已排除条目不会进入测试方案。"
+          />
+          <Space className="section-card">
+            <Button
+              danger
+              disabled={selectedAnalysisIds.length === 0}
+              onClick={() => {
+                Modal.confirm({
+                  title: "批量删除历史分析结果",
+                  content: `将删除选中的 ${selectedAnalysisIds.length} 条历史分析结果。`,
+                  okText: "删除",
+                  okButtonProps: { danger: true },
+                  cancelText: "取消",
+                  onOk: removeSelectedAnalyses,
+                });
+              }}
+            >
+              批量删除
+            </Button>
+            <Typography.Text type="secondary">已选择 {selectedAnalysisIds.length} 条</Typography.Text>
+          </Space>
+          <Table
+            rowKey="id"
+            size="small"
+            columns={analysisColumns}
+            dataSource={analyses}
+            pagination={{ pageSize: 5 }}
+            rowSelection={{
+              selectedRowKeys: selectedAnalysisIds,
+              onChange: setSelectedAnalysisIds,
+            }}
+            rowClassName={(item) => item.id === analysis?.id ? "ant-table-row-selected" : ""}
+          />
+        </Card>
+      )}
       {analysis && (
         <Card title="分析结果" className="section-card">
           {aiStatusAlert(analysis)}
@@ -262,6 +429,10 @@ export default function RequirementAnalysisPage() {
             <Descriptions.Item label="变更类型">{analysis.parse_result.change_type}</Descriptions.Item>
             <Descriptions.Item label="产品型号">{analysis.parse_result.product_model ?? "待确认"}</Descriptions.Item>
             <Descriptions.Item label="子系统">{analysis.parse_result.subsystem}</Descriptions.Item>
+            <Descriptions.Item label="创建时间">{new Date(analysis.created_at).toLocaleString()}</Descriptions.Item>
+            <Descriptions.Item label="方案可用项">
+              <Tag color="green">{analysis.recommendations.filter((item) => item.review_status === "confirmed").length} 个已确认</Tag>
+            </Descriptions.Item>
           </Descriptions>
           <List
             className="section-card"
@@ -278,11 +449,12 @@ export default function RequirementAnalysisPage() {
             renderItem={(item) => (
               <List.Item
                 actions={[
+                  item.source_type === "ai_generated" && <Button key="include-local" size="small" type="link" onClick={() => includeLocalRecommendation(item)}>纳入本地</Button>,
                   <Button key="confirm" size="small" type="link" onClick={() => setRecommendationStatus(item, "confirmed")}>确认</Button>,
                   <Button key="exclude" size="small" type="link" danger onClick={() => setRecommendationStatus(item, "excluded")}>排除</Button>,
                   <Button key="edit" size="small" type="link" onClick={() => openEditRecommendation(item)}>编辑</Button>,
                   <Button key="delete" size="small" type="link" danger onClick={() => removeRecommendation(item)}>删除</Button>,
-                ]}
+                ].filter(Boolean)}
               >
               <List.Item.Meta
                 title={

@@ -7,11 +7,13 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.config import get_settings
 from app.core.database import Base, session_scope
+from app.modules.admin.service import get_persisted_validation_export_directory
 from app.modules.ai.service import run_json_task
 from app.modules.requirements.service import get_analysis, list_analyses
 from app.modules.validation_plans.docx_exporter import render_validation_plan_docx
 from app.modules.validation_plans.schemas import (
     ExportRecord,
+    ValidationPlanBulkDeleteResponse,
     ValidationPlanCheckResult,
     ValidationPlanItem,
     ValidationPlanRead,
@@ -19,6 +21,7 @@ from app.modules.validation_plans.schemas import (
 
 PLANS: dict[str, ValidationPlanRead] = {}
 EXPORTS: dict[str, ExportRecord] = {}
+VALIDATION_PLAN_STATUSES = {"draft", "reviewing", "approved", "exported", "archived"}
 
 
 class ValidationPlanRecord(Base):
@@ -123,10 +126,7 @@ def _build_plan(project_id: str, analyses: list) -> ValidationPlanRead:
 
 
 def select_plan_recommendations(recommendations: list) -> list:
-    confirmed = [item for item in recommendations if item.review_status == "confirmed"]
-    if confirmed:
-        return confirmed
-    return [item for item in recommendations if item.review_status == "pending"]
+    return [item for item in recommendations if item.review_status == "confirmed"]
 
 
 def get_plan(plan_id: str) -> ValidationPlanRead | None:
@@ -150,6 +150,43 @@ def list_plans(project_id: str | None = None) -> list[ValidationPlanRead]:
     if project_id is not None:
         plans = [plan for plan in plans if plan.project_id == project_id]
     return sorted(plans, key=lambda plan: plan.created_at, reverse=True)
+
+
+def update_plan_status(plan_id: str, status: str) -> ValidationPlanRead | None:
+    if status not in VALIDATION_PLAN_STATUSES:
+        raise ValueError(f"Unsupported validation plan status: {status}")
+    plan = get_plan(plan_id)
+    if plan is None:
+        return None
+    updated = plan.model_copy(update={"status": status})
+    _save_plan(updated)
+    return updated
+
+
+def delete_plan(plan_id: str) -> bool:
+    if _use_sqlalchemy():
+        with session_scope() as session:
+            record = session.get(ValidationPlanRecord, plan_id)
+            if record is None:
+                return False
+            session.delete(record)
+            return True
+    return PLANS.pop(plan_id, None) is not None
+
+
+def bulk_delete_plans(plan_ids: list[str]) -> ValidationPlanBulkDeleteResponse:
+    deleted_ids: list[str] = []
+    skipped: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for plan_id in plan_ids:
+        if plan_id in seen:
+            continue
+        seen.add(plan_id)
+        if delete_plan(plan_id):
+            deleted_ids.append(plan_id)
+        else:
+            skipped.append({"plan_id": plan_id, "reason": "方案不存在"})
+    return ValidationPlanBulkDeleteResponse(deleted_ids=deleted_ids, skipped=skipped)
 
 
 def check_plan(plan_id: str) -> ValidationPlanCheckResult | None:
@@ -209,8 +246,11 @@ def export_plan(plan_id: str) -> ExportRecord | None:
     export_id = f"export-{uuid4()}"
     settings = get_settings()
     filename = f"{plan.title}.docx"
-    output_path = Path(settings.local_storage_root) / "exports" / export_id / filename
+    export_directory = get_persisted_validation_export_directory()
+    output_root = Path(export_directory) if export_directory else Path(settings.local_storage_root) / "exports"
+    output_path = output_root / export_id / filename
     render_validation_plan_docx(plan, Path(settings.validation_plan_template_path), output_path)
+    update_plan_status(plan_id, "exported")
     record = ExportRecord(
         id=export_id,
         validation_plan_id=plan_id,

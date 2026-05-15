@@ -5,13 +5,16 @@ import {
   DocumentImportConfig,
   fetchAiConfig,
   fetchDocumentImportConfig,
+  fetchValidationPlanExportConfig,
   fetchSystemConfig,
   SystemConfig,
   SystemConfigUpdate,
   restoreSystemConfigBackup,
   updateAiConfig,
   updateDocumentImportConfig,
+  updateValidationPlanExportConfig,
   updateSystemConfig,
+  ValidationPlanExportConfig,
 } from "../api/client";
 
 type AiSettingsForm = {
@@ -26,18 +29,25 @@ type DocumentImportForm = {
   import_directory: string;
 };
 
+type ValidationPlanExportForm = {
+  export_directory: string;
+};
+
 type DictionaryForm = Required<SystemConfigUpdate>;
 
 export default function SettingsPage() {
   const [form] = Form.useForm<AiSettingsForm>();
   const [documentImportForm] = Form.useForm<DocumentImportForm>();
+  const [validationPlanExportForm] = Form.useForm<ValidationPlanExportForm>();
   const [dictionaryForm] = Form.useForm<DictionaryForm>();
   const [aiConfig, setAiConfig] = useState<AiConfig | null>(null);
   const [documentImportConfig, setDocumentImportConfig] = useState<DocumentImportConfig | null>(null);
+  const [validationPlanExportConfig, setValidationPlanExportConfig] = useState<ValidationPlanExportConfig | null>(null);
   const [systemConfig, setSystemConfig] = useState<SystemConfig | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savingDocumentImport, setSavingDocumentImport] = useState(false);
+  const [savingValidationPlanExport, setSavingValidationPlanExport] = useState(false);
   const [savingDictionaries, setSavingDictionaries] = useState(false);
 
   function loadConfig() {
@@ -66,6 +76,15 @@ export default function SettingsPage() {
       .catch((error: Error) => message.error(`读取资料导入配置失败：${error.message}`));
   }
 
+  function loadValidationPlanExportConfig() {
+    fetchValidationPlanExportConfig()
+      .then((config) => {
+        setValidationPlanExportConfig(config);
+        validationPlanExportForm.setFieldsValue({ export_directory: config.export_directory });
+      })
+      .catch((error: Error) => message.error(`读取验证方案导出配置失败：${error.message}`));
+  }
+
   function loadSystemConfig() {
     fetchSystemConfig()
       .then((config) => {
@@ -84,6 +103,7 @@ export default function SettingsPage() {
   useEffect(() => {
     loadConfig();
     loadDocumentImportConfig();
+    loadValidationPlanExportConfig();
     loadSystemConfig();
   }, []);
 
@@ -108,6 +128,17 @@ export default function SettingsPage() {
       })
       .catch((error: Error) => message.error(`保存失败：${error.message}`))
       .finally(() => setSavingDocumentImport(false));
+  }
+
+  function saveValidationPlanExport(values: ValidationPlanExportForm) {
+    setSavingValidationPlanExport(true);
+    updateValidationPlanExportConfig(values.export_directory)
+      .then((config) => {
+        setValidationPlanExportConfig(config);
+        message.success("验证方案导出目录已保存");
+      })
+      .catch((error: Error) => message.error(`保存失败：${error.message}`))
+      .finally(() => setSavingValidationPlanExport(false));
   }
 
   function saveDictionaries(values: DictionaryForm) {
@@ -216,6 +247,29 @@ export default function SettingsPage() {
           <Space>
             <Button type="primary" htmlType="submit" loading={savingDocumentImport}>保存导入目录</Button>
             <Button onClick={loadDocumentImportConfig}>刷新目录配置</Button>
+          </Space>
+        </Form>
+      </Card>
+
+      <Card title="验证方案导出目录" className="section-card">
+        <Typography.Paragraph type="secondary">
+          配置后端服务器上的 Word 导出目录。留空时，系统使用默认本地存储目录下的 exports 目录。
+        </Typography.Paragraph>
+        {validationPlanExportConfig && (
+          <Descriptions column={1} size="small" className="section-card">
+            <Descriptions.Item label="配置状态">
+              <Tag color={validationPlanExportConfig.configured ? "green" : "default"}>{validationPlanExportConfig.configured ? "已配置" : "默认目录"}</Tag>
+            </Descriptions.Item>
+            <Descriptions.Item label="当前目录">{validationPlanExportConfig.export_directory || "默认 exports 目录"}</Descriptions.Item>
+          </Descriptions>
+        )}
+        <Form form={validationPlanExportForm} layout="vertical" onFinish={saveValidationPlanExport}>
+          <Form.Item name="export_directory" label="服务器验证方案导出目录" extra="示例：/data/gene-test-exports。该路径需要后端服务进程可写。">
+            <Input placeholder="/data/gene-test-exports" />
+          </Form.Item>
+          <Space>
+            <Button type="primary" htmlType="submit" loading={savingValidationPlanExport}>保存导出目录</Button>
+            <Button onClick={loadValidationPlanExportConfig}>刷新目录配置</Button>
           </Space>
         </Form>
       </Card>

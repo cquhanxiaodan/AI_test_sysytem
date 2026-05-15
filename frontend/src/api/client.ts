@@ -54,6 +54,11 @@ export type DocumentImportConfig = {
   configured: boolean;
 };
 
+export type ValidationPlanExportConfig = {
+  export_directory: string;
+  configured: boolean;
+};
+
 export type DocumentDirectoryScanResult = {
   import_directory: string;
   imported: DocumentItem[];
@@ -248,6 +253,17 @@ export type ExportRecord = {
   created_at: string;
 };
 
+export type ValidationPlanCheckResult = {
+  blocking: string[];
+  warnings: string[];
+  suggestions: string[];
+};
+
+export type ValidationPlanBulkDeleteResult = {
+  deleted_ids: string[];
+  skipped: Array<{ plan_id: string; reason: string }>;
+};
+
 export type AcceptanceStatus = {
   completed_stages: string[];
   backend_test_count: number;
@@ -322,6 +338,10 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
   if (!response.ok) {
     throw new Error(await response.text());
+  }
+
+  if (response.status === 204) {
+    return undefined as T;
   }
 
   return response.json() as Promise<T>;
@@ -424,6 +444,17 @@ export async function updateDocumentImportConfig(importDirectory: string) {
   return request<DocumentImportConfig>("/api/documents/import-config", {
     method: "PUT",
     body: JSON.stringify({ import_directory: importDirectory }),
+  });
+}
+
+export async function fetchValidationPlanExportConfig() {
+  return request<ValidationPlanExportConfig>("/api/admin/validation-plan-export-config");
+}
+
+export async function updateValidationPlanExportConfig(exportDirectory: string) {
+  return request<ValidationPlanExportConfig>("/api/admin/validation-plan-export-config", {
+    method: "PUT",
+    body: JSON.stringify({ export_directory: exportDirectory }),
   });
 }
 
@@ -642,6 +673,18 @@ export async function runRequirementAiRecommendations(analysisId: string, signal
   }
 }
 
+export async function fetchLatestRequirementAnalysis(projectId: string) {
+  return request<RequirementAnalysis | null>(`/api/requirement-analyses/latest?project_id=${encodeURIComponent(projectId)}`);
+}
+
+export async function fetchRequirementAnalyses(projectId: string) {
+  return request<RequirementAnalysis[]>(`/api/requirement-analyses?project_id=${encodeURIComponent(projectId)}`);
+}
+
+export async function deleteRequirementAnalysis(analysisId: string) {
+  return request<void>(`/api/requirement-analyses/${analysisId}`, { method: "DELETE" });
+}
+
 export async function createRequirementRecommendation(analysisId: string, payload: RequirementRecommendationCreate) {
   return request<RequirementAnalysis>(`/api/requirement-analyses/${analysisId}/recommendations`, {
     method: "POST",
@@ -657,6 +700,12 @@ export async function updateRequirementRecommendation(
   return request<RequirementAnalysis>(`/api/requirement-analyses/${analysisId}/recommendations/${recommendationId}`, {
     method: "PATCH",
     body: JSON.stringify(payload),
+  });
+}
+
+export async function includeRequirementRecommendationInLocal(analysisId: string, recommendationId: string) {
+  return request<RequirementAnalysis>(`/api/requirement-analyses/${analysisId}/recommendations/${recommendationId}/include-local`, {
+    method: "POST",
   });
 }
 
@@ -679,11 +728,29 @@ export async function createValidationPlan(projectId: string) {
 }
 
 export async function checkValidationPlan(planId: string) {
-  return request<{ blocking: string[]; warnings: string[]; suggestions: string[] }>(`/api/validation-plans/${planId}/check`, { method: "POST" });
+  return request<ValidationPlanCheckResult>(`/api/validation-plans/${planId}/check`, { method: "POST" });
 }
 
 export async function exportValidationPlan(planId: string) {
   return request<ExportRecord>(`/api/validation-plans/${planId}/export`, { method: "POST" });
+}
+
+export async function updateValidationPlanStatus(planId: string, status: string) {
+  return request<ValidationPlan>(`/api/validation-plans/${planId}/status`, {
+    method: "PATCH",
+    body: JSON.stringify({ status }),
+  });
+}
+
+export async function deleteValidationPlan(planId: string) {
+  return request<void>(`/api/validation-plans/${planId}`, { method: "DELETE" });
+}
+
+export async function bulkDeleteValidationPlans(planIds: string[]) {
+  return request<ValidationPlanBulkDeleteResult>("/api/validation-plans/bulk-delete", {
+    method: "POST",
+    body: JSON.stringify({ plan_ids: planIds }),
+  });
 }
 
 export async function fetchAcceptanceStatus() {

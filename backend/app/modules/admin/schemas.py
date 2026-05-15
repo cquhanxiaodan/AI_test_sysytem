@@ -24,6 +24,12 @@ class SystemSettingsFile(BaseModel):
     system_config: SystemConfig
     ai_config: AiSettingsConfig = Field(default_factory=AiSettingsConfig)
     document_import_directory: str = ""
+    validation_plan_export_directory: str = ""
+
+
+class ValidationPlanExportConfig(BaseModel):
+    export_directory: str
+    configured: bool
 
 
 class SystemConfigUpdate(BaseModel):

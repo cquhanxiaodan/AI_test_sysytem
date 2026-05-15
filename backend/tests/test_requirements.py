@@ -7,6 +7,7 @@ from app.modules.documents.repository import DOCUMENTS
 from app.modules.parsing.service import CHUNKS, TASKS
 from app.modules.requirements.service import ANALYSES
 from app.modules.risks.service import RISKS
+from app.modules.test_items.service import list_test_items
 from app.modules.test_items.service import TEST_ITEMS
 from app.modules.test_packages.service import TEST_PACKAGES
 
@@ -70,6 +71,69 @@ def test_requirement_analysis_recommends_rfid_package_and_risks() -> None:
     assert {"必测", "建议", "条件触发", "风险补充"}.issubset(groups)
 
 
+def test_latest_requirement_analysis_returns_project_latest() -> None:
+    headers = auth_headers()
+    seed_assets(headers)
+
+    first = client.post(
+        "/api/requirement-analyses/local",
+        headers=headers,
+        json={"project_id": "project-g99-rfid", "description": "DNBSEQ-G99 引入二供供应商康奈特 RFID"},
+    )
+    second = client.post(
+        "/api/requirement-analyses/local",
+        headers=headers,
+        json={"project_id": "project-g99-rfid", "description": "DNBSEQ-G99 再次引入二供供应商康奈特 RFID"},
+    )
+    latest = client.get("/api/requirement-analyses/latest?project_id=project-g99-rfid", headers=headers)
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert latest.status_code == 200
+    assert latest.json()["id"] == second.json()["id"]
+
+
+def test_list_requirement_analyses_returns_project_history() -> None:
+    headers = auth_headers()
+    seed_assets(headers)
+    first = client.post(
+        "/api/requirement-analyses/local",
+        headers=headers,
+        json={"project_id": "project-g99-rfid", "description": "DNBSEQ-G99 引入二供供应商康奈特 RFID"},
+    )
+    second = client.post(
+        "/api/requirement-analyses/local",
+        headers=headers,
+        json={"project_id": "project-g99-rfid", "description": "DNBSEQ-G99 再次引入二供供应商康奈特 RFID"},
+    )
+
+    history = client.get("/api/requirement-analyses?project_id=project-g99-rfid", headers=headers)
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert history.status_code == 200
+    assert [item["id"] for item in history.json()] == [second.json()["id"], first.json()["id"]]
+
+
+def test_delete_requirement_analysis_removes_history_item() -> None:
+    headers = auth_headers()
+    seed_assets(headers)
+    created = client.post(
+        "/api/requirement-analyses/local",
+        headers=headers,
+        json={"project_id": "project-g99-rfid", "description": "DNBSEQ-G99 引入二供供应商康奈特 RFID"},
+    )
+
+    deleted = client.delete(f"/api/requirement-analyses/{created.json()['id']}", headers=headers)
+    detail = client.get(f"/api/requirement-analyses/{created.json()['id']}", headers=headers)
+    history = client.get("/api/requirement-analyses?project_id=project-g99-rfid", headers=headers)
+
+    assert created.status_code == 200
+    assert deleted.status_code == 204
+    assert detail.status_code == 404
+    assert history.json() == []
+
+
 def test_requirement_analysis_deduplicates_recommendations_by_title(monkeypatch) -> None:
     headers = auth_headers()
     seed_assets(headers)
@@ -122,6 +186,13 @@ def test_requirement_analysis_skips_package_knowledge_and_merges_similar_titles(
                 text="同类装配测试命中",
                 score=1,
             ),
+            SearchResult(
+                source_type="test_item",
+                source_id="test-item-install",
+                title="整机安装适配测试",
+                text="整机安装适配测试 检验RFID结构适配安装至整机是否存在异常。",
+                score=1,
+            ),
         ]
 
     monkeypatch.setattr("app.modules.requirements.service.search_project_knowledge", fake_search_project_knowledge)
@@ -136,6 +207,7 @@ def test_requirement_analysis_skips_package_knowledge_and_merges_similar_titles(
     titles = [item["title"] for item in response.json()["recommendations"]]
     assert "RFID 供应商变更验证包" not in titles
     assert "整机装配测试" not in titles
+    assert "整机安装适配测试" not in titles
     assert "RFID 在机装配测试" in titles
 
 
@@ -292,6 +364,51 @@ def test_requirement_analysis_accepts_ai_generated_missing_test_items(monkeypatc
         for item in recommendations
     )
 
+
+def test_include_ai_recommendation_in_local_test_items(monkeypatch) -> None:
+    headers = auth_headers()
+    seed_assets(headers)
+
+    def fake_run_json_task(task_type, *args, **kwargs):
+        if task_type == "requirement_recommendation":
+            return AiTaskResult(output={
+                "required": [
+                    {
+                        "title": "新增 RFID 异常断电恢复测试",
+                        "source_id": "ai-power-recovery",
+                        "reason": "AI 识别缺失测试项",
+                        "evidence": "供应商变更可能影响异常恢复",
+                        "objective": "验证 RFID 异常断电恢复能力。",
+                        "method": "执行异常断电后重新上电读取 RFID。",
+                        "record_template": "记录断电条件、恢复结果和异常日志。",
+                    }
+                ],
+                "suggested": [],
+                "conditional": [],
+                "evidence": "AI 识别缺失测试项",
+            }, status="succeeded", message="AI 调用成功。")
+        return AiTaskResult(output=None, status="not_configured", message="AI 未配置。")
+
+    monkeypatch.setattr("app.modules.requirements.service.run_json_task_detailed", fake_run_json_task)
+    analysis = client.post(
+        "/api/requirement-analyses",
+        headers=headers,
+        json={"project_id": "project-g99-rfid", "description": "DNBSEQ-G99 引入二供供应商康奈特 RFID"},
+    ).json()
+    recommendation = next(item for item in analysis["recommendations"] if item["source_type"] == "ai_generated")
+
+    included = client.post(
+        f"/api/requirement-analyses/{analysis['id']}/recommendations/{recommendation['id']}/include-local",
+        headers=headers,
+    )
+
+    assert included.status_code == 200
+    updated = next(item for item in included.json()["recommendations"] if item["id"] == recommendation["id"])
+    assert updated["source_type"] == "test_item"
+    assert updated["review_status"] == "confirmed"
+    local_item = next(item for item in list_test_items("project-g99-rfid") if item.id == updated["source_id"])
+    assert local_item.title == "新增 RFID 异常断电恢复测试"
+    assert local_item.status == "published"
 
 def test_requirement_recommendation_review_crud() -> None:
     headers = auth_headers()

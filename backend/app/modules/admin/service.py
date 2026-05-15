@@ -8,7 +8,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.config import get_settings
 from app.core.database import Base, session_scope
-from app.modules.admin.schemas import AcceptanceStatus, AiSettingsConfig, AuditEvent, SystemConfig, SystemConfigUpdate, SystemSettingsFile
+from app.modules.admin.schemas import AcceptanceStatus, AiSettingsConfig, AuditEvent, SystemConfig, SystemConfigUpdate, SystemSettingsFile, ValidationPlanExportConfig
 
 AUDIT_EVENTS: dict[str, AuditEvent] = {}
 
@@ -131,8 +131,26 @@ def get_persisted_import_directory() -> str:
     return settings_file.document_import_directory.strip()
 
 
+def get_persisted_validation_export_directory() -> str:
+    settings_file = load_settings_file()
+    if settings_file is None:
+        return get_settings().validation_plan_export_directory.strip()
+    return settings_file.validation_plan_export_directory.strip()
+
+
+def get_validation_export_config() -> ValidationPlanExportConfig:
+    export_directory = get_persisted_validation_export_directory()
+    return ValidationPlanExportConfig(export_directory=export_directory, configured=bool(export_directory))
+
+
 def save_import_directory(import_directory: str) -> None:
     save_system_settings(document_import_directory=import_directory.strip())
+
+
+def save_validation_export_directory(export_directory: str) -> ValidationPlanExportConfig:
+    normalized = export_directory.strip()
+    save_system_settings(validation_plan_export_directory=normalized)
+    return ValidationPlanExportConfig(export_directory=normalized, configured=bool(normalized))
 
 
 def save_system_settings(
@@ -140,6 +158,7 @@ def save_system_settings(
     system_config: SystemConfig | None = None,
     ai_config: AiSettingsConfig | None = None,
     document_import_directory: str | None = None,
+    validation_plan_export_directory: str | None = None,
 ) -> SystemSettingsFile:
     current = load_settings_file() or SystemSettingsFile(system_config=CONFIG)
     updated = current.model_copy(
@@ -149,6 +168,7 @@ def save_system_settings(
                 "system_config": system_config,
                 "ai_config": ai_config,
                 "document_import_directory": document_import_directory,
+                "validation_plan_export_directory": validation_plan_export_directory,
             }.items()
             if value is not None
         }
@@ -180,6 +200,7 @@ def load_settings_file(backup: bool = False) -> SystemSettingsFile | None:
             timeout_seconds=settings.ai_timeout_seconds,
         ),
         document_import_directory=settings.document_import_directory.strip(),
+        validation_plan_export_directory=settings.validation_plan_export_directory.strip(),
     )
 
 

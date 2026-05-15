@@ -32,6 +32,19 @@ class ValidationPlanCreateRequest(BaseModel):
     project_id: str | None = None
 
 
+class ValidationPlanStatusUpdate(BaseModel):
+    status: str
+
+
+class ValidationPlanBulkDeleteRequest(BaseModel):
+    plan_ids: list[str]
+
+
+class ValidationPlanBulkDeleteResponse(BaseModel):
+    deleted_ids: list[str]
+    skipped: list[dict[str, str]]
+
+
 class ValidationPlanCheckResult(BaseModel):
     blocking: list[str]
     warnings: list[str]

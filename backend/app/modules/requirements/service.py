@@ -3,7 +3,7 @@ import csv
 import io
 from uuid import uuid4
 
-from sqlalchemy import DateTime, JSON, String, Text, select
+from sqlalchemy import DateTime, JSON, String, Text, delete, select
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.config import get_settings
@@ -18,6 +18,7 @@ from app.modules.requirements.schemas import (
     RequirementRecommendationUpdate,
 )
 from app.modules.risks.service import list_risks
+from app.modules.test_items.service import create_item_from_fields
 from app.modules.test_packages.service import list_packages
 
 ANALYSES: dict[str, RequirementAnalysisRead] = {}
@@ -198,6 +199,22 @@ def get_analysis(analysis_id: str) -> RequirementAnalysisRead | None:
     return ANALYSES.get(analysis_id)
 
 
+def get_latest_analysis(project_id: str) -> RequirementAnalysisRead | None:
+    if _use_sqlalchemy():
+        with session_scope() as session:
+            record = session.scalars(
+                select(RequirementAnalysisRecord)
+                .where(RequirementAnalysisRecord.project_id == project_id)
+                .order_by(RequirementAnalysisRecord.created_at.desc())
+                .limit(1)
+            ).first()
+            return _record_to_analysis(record) if record is not None else None
+    analyses = [analysis for analysis in ANALYSES.values() if analysis.project_id == project_id]
+    if not analyses:
+        return None
+    return max(analyses, key=lambda analysis: analysis.created_at)
+
+
 def add_recommendation(analysis_id: str, payload: RequirementRecommendationCreate) -> RequirementAnalysisRead | None:
     analysis = get_analysis(analysis_id)
     if analysis is None:
@@ -246,13 +263,53 @@ def delete_recommendation(analysis_id: str, recommendation_id: str) -> Requireme
     return analysis
 
 
+def delete_analysis(analysis_id: str) -> bool:
+    if _use_sqlalchemy():
+        with session_scope() as session:
+            result = session.execute(delete(RequirementAnalysisRecord).where(RequirementAnalysisRecord.id == analysis_id))
+            return (result.rowcount or 0) > 0
+    return ANALYSES.pop(analysis_id, None) is not None
+
+
+def include_recommendation_in_local_items(analysis_id: str, recommendation_id: str) -> RequirementAnalysisRead | None:
+    analysis = get_analysis(analysis_id)
+    if analysis is None:
+        return None
+    for index, recommendation in enumerate(analysis.recommendations):
+        if recommendation.id != recommendation_id:
+            continue
+        local_item = create_item_from_fields(
+            project_id=analysis.project_id,
+            title=recommendation.title,
+            test_object=analysis.parse_result.test_object,
+            subsystem=analysis.parse_result.subsystem,
+            objective=recommendation.objective or f"验证{recommendation.title}满足变更需求。",
+            method=recommendation.method or "按既有验证方案模板执行测试步骤并记录结果。",
+            record_template=recommendation.record_template or "记录样本编号、测试条件、实际结果、判定结论和关联 BUG。",
+            evidence=f"需求分析纳入本地：{recommendation.evidence}",
+        )
+        analysis.recommendations[index] = recommendation.model_copy(
+            update={
+                "source_type": "test_item",
+                "source_id": local_item.id,
+                "reason": f"已纳入本地测试条目资产：{local_item.title}",
+                "review_status": "confirmed",
+            }
+        )
+        _save_analysis(analysis)
+        return analysis
+    return None
+
+
 def list_analyses(project_id: str) -> list[RequirementAnalysisRead]:
     if _use_sqlalchemy():
         with session_scope() as session:
             statement = select(RequirementAnalysisRecord).where(RequirementAnalysisRecord.project_id == project_id)
             records = session.scalars(statement).all()
-            return [_record_to_analysis(record) for record in records]
-    return [analysis for analysis in ANALYSES.values() if analysis.project_id == project_id]
+            analyses = [_record_to_analysis(record) for record in records]
+            return sorted(analyses, key=lambda analysis: analysis.created_at, reverse=True)
+    analyses = [analysis for analysis in ANALYSES.values() if analysis.project_id == project_id]
+    return sorted(analyses, key=lambda analysis: analysis.created_at, reverse=True)
 
 
 def parse_requirement(description: str) -> RequirementParseResult:
@@ -425,7 +482,11 @@ def normalize_exact_title(title: str) -> str:
 
 def normalize_recommendation_title(title: str) -> str:
     compact = normalize_exact_title(title)
-    for keyword in ["初始化", "装配", "读取", "写入", "兼容性", "安规emc", "emc"]:
+    if "初始化" in compact:
+        return "初始化"
+    if any(keyword in compact for keyword in ["装配", "安装", "适配"]):
+        return "安装装配适配"
+    for keyword in ["读取", "写入", "兼容性", "安规emc", "emc"]:
         if keyword in compact:
             return keyword
     return compact
