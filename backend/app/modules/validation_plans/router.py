@@ -45,6 +45,15 @@ def create(payload: ValidationPlanCreateRequest, current_user: SeedUser = Depend
     return plan
 
 
+@router.post("/bulk-delete", response_model=ValidationPlanBulkDeleteResponse)
+def bulk_delete(payload: ValidationPlanBulkDeleteRequest, current_user: SeedUser = Depends(get_current_user)) -> ValidationPlanBulkDeleteResponse:
+    allowed_ids = {plan.id for plan in list_plans() if get_project_for_user(plan.project_id, current_user) is not None}
+    requested_ids = [plan_id for plan_id in payload.plan_ids if plan_id in allowed_ids]
+    result = bulk_delete_plans(requested_ids)
+    denied = [{"plan_id": plan_id, "reason": "方案不存在或无访问权限"} for plan_id in payload.plan_ids if plan_id not in allowed_ids]
+    return ValidationPlanBulkDeleteResponse(deleted_ids=result.deleted_ids, skipped=[*result.skipped, *denied])
+
+
 @router.get("/{plan_id}", response_model=ValidationPlanRead)
 def detail(plan_id: str, current_user: SeedUser = Depends(get_current_user)) -> ValidationPlanRead:
     plan = get_plan(plan_id)
@@ -71,15 +80,6 @@ def update_status(plan_id: str, payload: ValidationPlanStatusUpdate, current_use
 def delete(plan_id: str, current_user: SeedUser = Depends(get_current_user)) -> None:
     detail(plan_id, current_user)
     delete_plan(plan_id)
-
-
-@router.post("/bulk-delete", response_model=ValidationPlanBulkDeleteResponse)
-def bulk_delete(payload: ValidationPlanBulkDeleteRequest, current_user: SeedUser = Depends(get_current_user)) -> ValidationPlanBulkDeleteResponse:
-    allowed_ids = {plan.id for plan in list_plans() if get_project_for_user(plan.project_id, current_user) is not None}
-    requested_ids = [plan_id for plan_id in payload.plan_ids if plan_id in allowed_ids]
-    result = bulk_delete_plans(requested_ids)
-    denied = [{"plan_id": plan_id, "reason": "方案不存在或无访问权限"} for plan_id in payload.plan_ids if plan_id not in allowed_ids]
-    return ValidationPlanBulkDeleteResponse(deleted_ids=result.deleted_ids, skipped=[*result.skipped, *denied])
 
 
 @router.post("/{plan_id}/check", response_model=ValidationPlanCheckResult)

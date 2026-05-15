@@ -53,6 +53,30 @@ def test_split_rfid_document_creates_five_items() -> None:
     }
 
 
+def test_split_same_document_updates_existing_items() -> None:
+    headers = auth_headers()
+    upload = client.post(
+        "/api/documents/upload",
+        headers=headers,
+        data={"project_id": "project-g99-rfid"},
+        files={"file": ("DNBSEQ-G99 RFID验证方案.txt", b"RFID supplier change validation", "text/plain")},
+    )
+    document_id = upload.json()["document"]["id"]
+    first = client.post(f"/api/test-items/split/{document_id}", headers=headers)
+    first_ids = {item["title"]: item["id"] for item in first.json()["items"]}
+    client.post(f"/api/test-items/{next(iter(first_ids.values()))}/confirm", headers=headers)
+
+    second = client.post(f"/api/test-items/split/{document_id}", headers=headers)
+
+    assert second.status_code == 200
+    second_ids = {item["title"]: item["id"] for item in second.json()["items"]}
+    assert second_ids == first_ids
+    listed = client.get("/api/test-items?project_id=project-g99-rfid", headers=headers)
+    assert len(listed.json()) == 5
+    statuses = {item["id"]: item["status"] for item in listed.json()}
+    assert "published" in statuses.values()
+
+
 def test_split_document_prefers_original_word_sections() -> None:
     headers = auth_headers()
     content = """

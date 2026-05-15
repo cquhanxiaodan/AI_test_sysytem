@@ -410,6 +410,56 @@ def test_include_ai_recommendation_in_local_test_items(monkeypatch) -> None:
     assert local_item.title == "新增 RFID 异常断电恢复测试"
     assert local_item.status == "published"
 
+
+def test_include_ai_recommendation_reuses_existing_local_test_item(monkeypatch) -> None:
+    headers = auth_headers()
+    seed_assets(headers)
+
+    def fake_run_json_task(task_type, *args, **kwargs):
+        if task_type == "requirement_recommendation":
+            return AiTaskResult(output={
+                "required": [
+                    {
+                        "title": "新增 RFID 异常断电恢复测试",
+                        "source_id": "ai-power-recovery",
+                        "reason": "AI 识别缺失测试项",
+                        "evidence": "供应商变更可能影响异常恢复",
+                        "objective": "验证 RFID 异常断电恢复能力。",
+                        "method": "执行异常断电后重新上电读取 RFID。",
+                        "record_template": "记录断电条件、恢复结果和异常日志。",
+                    }
+                ],
+                "suggested": [],
+                "conditional": [],
+                "evidence": "AI 识别缺失测试项",
+            }, status="succeeded", message="AI 调用成功。")
+        return AiTaskResult(output=None, status="not_configured", message="AI 未配置。")
+
+    monkeypatch.setattr("app.modules.requirements.service.run_json_task_detailed", fake_run_json_task)
+    analysis = client.post(
+        "/api/requirement-analyses",
+        headers=headers,
+        json={"project_id": "project-g99-rfid", "description": "DNBSEQ-G99 引入二供供应商康奈特 RFID"},
+    ).json()
+    recommendation = next(item for item in analysis["recommendations"] if item["source_type"] == "ai_generated")
+
+    first = client.post(
+        f"/api/requirement-analyses/{analysis['id']}/recommendations/{recommendation['id']}/include-local",
+        headers=headers,
+    )
+    second = client.post(
+        f"/api/requirement-analyses/{analysis['id']}/recommendations/{recommendation['id']}/include-local",
+        headers=headers,
+    )
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    matching_items = [item for item in list_test_items("project-g99-rfid") if item.title == "新增 RFID 异常断电恢复测试"]
+    assert len(matching_items) == 1
+    updated = next(item for item in second.json()["recommendations"] if item["id"] == recommendation["id"])
+    assert updated["source_id"] == matching_items[0].id
+
+
 def test_requirement_recommendation_review_crud() -> None:
     headers = auth_headers()
     seed_assets(headers)

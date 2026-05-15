@@ -99,9 +99,36 @@ def split_document_to_items(document_id: str) -> SplitResult | None:
     items = [build_test_item(document.project_id, document_id, document.filename, title, section_by_title.get(title)) for title in titles]
     items = split_items_with_ai(document.project_id, document_id, document.filename, text, items) or items
     items = [prefer_local_extracted_fields(item, document.filename, section_by_title.get(item.title)) for item in items]
-    for item in items:
+    saved_items = upsert_split_items(document_id, items)
+    return SplitResult(document_id=document_id, items=saved_items)
+
+
+def upsert_split_items(document_id: str, items: list[TestItemAsset]) -> list[TestItemAsset]:
+    existing_by_title = {normalize_test_item_title(item.title): item for item in list_test_items() if item.source_document_id == document_id}
+    saved_items: list[TestItemAsset] = []
+    for item in deduplicate_items_by_title(items):
+        existing = existing_by_title.get(normalize_test_item_title(item.title))
+        if existing is not None:
+            item = item.model_copy(update={"id": existing.id, "status": existing.status, "created_at": existing.created_at})
         _save_item(item)
-    return SplitResult(document_id=document_id, items=items)
+        saved_items.append(item)
+    return saved_items
+
+
+def deduplicate_items_by_title(items: list[TestItemAsset]) -> list[TestItemAsset]:
+    deduplicated: list[TestItemAsset] = []
+    seen: set[str] = set()
+    for item in items:
+        key = normalize_test_item_title(item.title)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduplicated.append(item)
+    return deduplicated
+
+
+def normalize_test_item_title(title: str) -> str:
+    return "".join(title.lower().split())
 
 
 def split_items_with_ai(project_id: str, document_id: str, filename: str, text: str, fallback_items: list[TestItemAsset]) -> list[TestItemAsset] | None:
@@ -190,6 +217,21 @@ def create_item_from_fields(
     record_template: str,
     evidence: str,
 ) -> TestItemAsset:
+    existing = find_test_item_by_title(project_id, title)
+    if existing is not None:
+        updated = existing.model_copy(
+            update={
+                "test_object": test_object,
+                "primary_subsystem": subsystem,
+                "objective": objective,
+                "method": method,
+                "record_template": record_template,
+                "evidence": evidence,
+                "status": "published",
+            }
+        )
+        _save_item(updated)
+        return updated
     item = TestItemAsset(
         id=f"item-{uuid4()}",
         project_id=project_id,
@@ -212,6 +254,11 @@ def create_item_from_fields(
     )
     _save_item(item)
     return item
+
+
+def find_test_item_by_title(project_id: str, title: str) -> TestItemAsset | None:
+    normalized_title = normalize_test_item_title(title)
+    return next((item for item in list_test_items(project_id) if normalize_test_item_title(item.title) == normalized_title), None)
 
 
 def get_item(item_id: str) -> TestItemAsset | None:
