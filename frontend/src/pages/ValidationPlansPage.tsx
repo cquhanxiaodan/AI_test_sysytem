@@ -1,8 +1,15 @@
-import { Button, Card, Empty, Form, Input, List, message, Modal, Select, Space, Table, Tag, Typography } from "antd";
+import { Button, Card, Empty, List, message, Modal, Select, Space, Table, Tag, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useState } from "react";
-import { bulkDeleteValidationPlans, checkValidationPlan, createValidationPlan, deleteValidationPlan, exportValidationPlan, fetchValidationPlans, updateValidationPlanStatus, ValidationPlan, ValidationPlanCheckResult } from "../api/client";
+import { bulkDeleteValidationPlans, checkValidationPlan, createValidationPlan, deleteValidationPlan, downloadValidationPlanExport, exportValidationPlan, fetchValidationPlans, updateValidationPlanStatus, ValidationPlan, ValidationPlanCheckResult } from "../api/client";
 import { useProjects } from "../context/ProjectContext";
+
+type ShowSaveFilePicker = (options?: {
+  suggestedName?: string;
+  types?: Array<{ description: string; accept: Record<string, string[]> }>;
+}) => Promise<FileSystemFileHandle>;
+
+type WindowWithSavePicker = Window & { showSaveFilePicker?: ShowSaveFilePicker };
 
 const PLAN_STATUSES = [
   { label: "草稿", value: "draft", color: "blue" },
@@ -21,10 +28,9 @@ export default function ValidationPlansPage() {
   const [plans, setPlans] = useState<ValidationPlan[]>([]);
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [exportingPlanId, setExportingPlanId] = useState<string | null>(null);
   const [activePlan, setActivePlan] = useState<ValidationPlan | null>(null);
   const [selectedPlanIds, setSelectedPlanIds] = useState<React.Key[]>([]);
-  const [exportingPlan, setExportingPlan] = useState<ValidationPlan | null>(null);
-  const [exportForm] = Form.useForm<{ export_directory: string }>();
 
   async function loadPlans() {
     if (!currentProject) return;
@@ -86,17 +92,46 @@ export default function ValidationPlansPage() {
     });
   }
 
-  function openExportDialog(plan: ValidationPlan) {
-    setExportingPlan(plan);
-    exportForm.setFieldsValue({ export_directory: "" });
+  async function exportPlan(plan: ValidationPlan) {
+    setExportingPlanId(plan.id);
+    try {
+      const result = await exportValidationPlan(plan.id);
+      const blob = await downloadValidationPlanExport(result);
+      await saveExportedFile(blob, result.filename);
+      message.success(`已导出文件：${result.filename}`);
+      await loadPlans();
+    } catch (error: unknown) {
+      message.error(`导出失败：${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setExportingPlanId(null);
+    }
   }
 
-  async function exportPlan(values: { export_directory: string }) {
-    if (!exportingPlan) return;
-    const result = await exportValidationPlan(exportingPlan.id, values.export_directory);
-    message.success(`已生成导出记录：${result.filename}`);
-    setExportingPlan(null);
-    await loadPlans();
+  async function saveExportedFile(blob: Blob, filename: string) {
+    const savePicker = (window as WindowWithSavePicker).showSaveFilePicker;
+    if (savePicker) {
+      const handle = await savePicker({
+        suggestedName: filename,
+        types: [
+          {
+            description: "Word 文档",
+            accept: { "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [".docx"] },
+          },
+        ],
+      });
+      const writable = await handle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+      return;
+    }
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
   }
 
   async function changePlanStatus(plan: ValidationPlan, nextStatus: string) {
@@ -167,7 +202,7 @@ export default function ValidationPlansPage() {
         <Space>
           <Button size="small" onClick={() => setActivePlan(plan)}>查看</Button>
           <Button size="small" onClick={() => checkPlan(plan)}>校验</Button>
-          <Button size="small" type="primary" onClick={() => openExportDialog(plan)}>导出</Button>
+          <Button size="small" type="primary" loading={exportingPlanId === plan.id} onClick={() => exportPlan(plan)}>导出</Button>
           <Button size="small" danger onClick={() => confirmDeletePlan(plan)}>删除</Button>
         </Space>
       ),
@@ -182,7 +217,7 @@ export default function ValidationPlansPage() {
       </Typography.Paragraph>
       <Card className="section-card">
         <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
-          导出时可填写本次 Word 文件保存到后端服务器的目录；留空时使用默认本地存储 exports 目录。状态支持草稿、评审中、已批准、已导出和已归档；导出成功后会自动切换为已导出。
+          点击导出后会生成 Word 文件并保存到本机。支持浏览器文件保存选择器时会弹出保存位置；浏览器不支持时会使用默认下载目录。状态支持草稿、评审中、已批准、已导出和已归档；导出成功后会自动切换为已导出。
         </Typography.Paragraph>
       </Card>
       <Card>
@@ -226,22 +261,6 @@ export default function ValidationPlansPage() {
             />
           </>
         )}
-      </Modal>
-      <Modal
-        title="导出验证方案"
-        open={Boolean(exportingPlan)}
-        onCancel={() => setExportingPlan(null)}
-        okText="导出"
-        onOk={() => exportForm.submit()}
-      >
-        <Typography.Paragraph type="secondary">
-          请输入后端服务器上的保存目录。留空时使用默认本地存储 exports 目录。
-        </Typography.Paragraph>
-        <Form form={exportForm} layout="vertical" onFinish={exportPlan}>
-          <Form.Item name="export_directory" label="本次导出目录" extra="示例：/data/gene-test-exports。该路径需要后端服务进程可写。">
-            <Input placeholder="/data/gene-test-exports" />
-          </Form.Item>
-        </Form>
       </Modal>
     </section>
   );

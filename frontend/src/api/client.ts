@@ -342,6 +342,24 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+
+async function requestBlob(path: string, options: RequestInit = {}) {
+  const token = getToken();
+  const response = await fetch(path, {
+    ...options,
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...options.headers,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(await response.text());
+  }
+
+  return response.blob();
+}
+
 function abortErrorMessage(error: unknown, fallback: string) {
   return error instanceof DOMException && error.name === "AbortError" ? fallback : undefined;
 }
@@ -715,11 +733,15 @@ export async function checkValidationPlan(planId: string) {
   return request<ValidationPlanCheckResult>(`/api/validation-plans/${planId}/check`, { method: "POST" });
 }
 
-export async function exportValidationPlan(planId: string, exportDirectory = "") {
+export async function exportValidationPlan(planId: string) {
   return request<ExportRecord>(`/api/validation-plans/${planId}/export`, {
     method: "POST",
-    body: JSON.stringify({ export_directory: exportDirectory }),
+    body: JSON.stringify({}),
   });
+}
+
+export async function downloadValidationPlanExport(record: ExportRecord) {
+  return requestBlob(record.download_url);
 }
 
 export async function updateValidationPlanStatus(planId: string, status: string) {
