@@ -37,6 +37,7 @@ class ExtractedTestSection:
     record_template: str = ""
     compliance_bug_info: str = ""
     source_section_text: str = ""
+    source_blocks: list[dict] | None = None
 
 
 class TestItemRecord(Base):
@@ -62,6 +63,7 @@ class TestItemRecord(Base):
     record_template: Mapped[str] = mapped_column(Text)
     compliance_bug_info: Mapped[str] = mapped_column(Text, default="")
     source_section_text: Mapped[str] = mapped_column(Text, default="")
+    source_blocks: Mapped[list[dict]] = mapped_column(JSON, default=list)
     evidence: Mapped[str] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(80), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
@@ -172,6 +174,7 @@ def split_items_with_ai(project_id: str, document_id: str, filename: str, text: 
                     record_template=str(raw_item.get("record_template") or "记录测试条件、实际结果、判定结论和关联 BUG。"),
                     compliance_bug_info=str(raw_item.get("compliance_bug_info") or "记录需求符合性结论和关联 BUG 信息。"),
                     source_section_text=str(raw_item.get("source_section_text") or ""),
+                    source_blocks=[],
                     evidence=filename,
                     status="draft",
                     created_at=datetime.now(UTC),
@@ -274,6 +277,7 @@ def create_item_from_fields(
         record_template=record_template,
         compliance_bug_info="记录需求符合性结论和关联 BUG 信息。",
         source_section_text="",
+        source_blocks=[],
         evidence=evidence,
         status=status,
         created_at=datetime.now(UTC),
@@ -331,9 +335,76 @@ def extract_test_sections(text: str) -> list[ExtractedTestSection]:
                 record_template=extract_labeled_text(section_lines, section_labels["record_template"], boundary_labels),
                 compliance_bug_info=extract_labeled_text(section_lines, section_labels["compliance_bug_info"], boundary_labels),
                 source_section_text="\n".join([title, *section_lines]).strip(),
+                source_blocks=build_source_blocks(title, section_lines, boundary_labels),
             )
         )
     return sections
+
+
+def build_source_blocks(title: str, section_lines: list[str], boundary_labels: set[str]) -> list[dict]:
+    blocks: list[dict] = [{"type": "paragraph", "text": title}]
+    current_label = ""
+    current_lines: list[str] = []
+    for line in section_lines:
+        if line in boundary_labels:
+            append_source_label_block(blocks, current_label, current_lines)
+            current_label = line
+            current_lines = []
+            continue
+        current_lines.append(line)
+    append_source_label_block(blocks, current_label, current_lines)
+    return blocks
+
+
+def append_source_label_block(blocks: list[dict], label: str, lines: list[str]) -> None:
+    if not label:
+        for line in lines:
+            blocks.append({"type": "paragraph", "text": line})
+        return
+    if label == "测试工具":
+        rows = [["序号", "名称", "设备型号", "制造商", "设备编码", "校准有效期"]]
+        for index, value in enumerate(split_list_text("\n".join(lines)) or ["/"], start=1):
+            rows.append([str(index), value, "/", "/", "/", "/"])
+        blocks.append({"type": "table", "section": label, "rows": rows})
+        return
+    if label == "测试记录":
+        values = split_list_text("\n".join(lines)) or ["待记录"]
+        rows = [
+            ["环境温度", "", "", "相对湿度", "", "", ""],
+            ["测试时间", "", "", "测试地点", "", "", ""],
+            ["测试人员", "", "", "测试结论", "", "", ""],
+            ["序号", "记录项目", "记录数据（单位）", "处理结果（单位）", "判定标准", "结果", "备注"],
+        ]
+        for index, value in enumerate(values, start=1):
+            rows.append([str(index), value, "", "", "\n".join(lines).strip() or "按测试标准判定。", "□P □F", ""])
+        blocks.append({"type": "table", "section": label, "rows": rows})
+        return
+    if label == "需求符合性和BUG信息":
+        text = "\n".join(lines).strip()
+        blocks.append(
+            {
+                "type": "table",
+                "section": "需求符合性",
+                "rows": [
+                    ["序号", "需求编号/DFMEA编号/风险管理编号", "需求描述", "测试结论", "备注"],
+                    ["1", "", text or "待记录需求符合性结论。", "", ""],
+                ],
+            }
+        )
+        blocks.append(
+            {
+                "type": "table",
+                "section": "BUG信息",
+                "rows": [
+                    ["序号", "问题描述", "涉及需求编号", "BUG编号（JIRA系统）", "RPN", "Bug解决状态"],
+                    ["1", "", "", "", "", ""],
+                ],
+            }
+        )
+        return
+    blocks.append({"type": "paragraph", "text": label})
+    for line in lines:
+        blocks.append({"type": "paragraph", "text": line})
 
 
 def normalize_lines(text: str) -> list[str]:
@@ -444,6 +515,7 @@ def build_test_item(project_id: str, document_id: str, filename: str, title: str
     connection_media = section.connection_media if section and section.connection_media else "待补充"
     compliance_bug_info = section.compliance_bug_info if section and section.compliance_bug_info else "记录需求符合性结论和关联 BUG 信息。"
     source_section_text = section.source_section_text if section and section.source_section_text else ""
+    source_blocks = section.source_blocks if section and section.source_blocks else []
     return TestItemAsset(
         id=f"item-{uuid4()}",
         project_id=project_id,
@@ -465,6 +537,7 @@ def build_test_item(project_id: str, document_id: str, filename: str, title: str
         record_template=record_template,
         compliance_bug_info=compliance_bug_info,
         source_section_text=source_section_text,
+        source_blocks=source_blocks,
         evidence=filename,
         status="draft",
         created_at=datetime.now(UTC),
@@ -491,6 +564,8 @@ def prefer_local_extracted_fields(item: TestItemAsset, filename: str, section: E
         updates["compliance_bug_info"] = section.compliance_bug_info
     if section.source_section_text:
         updates["source_section_text"] = section.source_section_text
+    if section.source_blocks:
+        updates["source_blocks"] = section.source_blocks
     inferred_module = infer_module_from_text(item.title, section.source_section_text)
     if inferred_module:
         updates["module"] = inferred_module
@@ -595,6 +670,7 @@ def _item_to_record(item: TestItemAsset) -> TestItemRecord:
         record_template=item.record_template,
         compliance_bug_info=item.compliance_bug_info,
         source_section_text=item.source_section_text,
+        source_blocks=item.source_blocks,
         evidence=item.evidence,
         status=item.status,
         created_at=item.created_at,
@@ -623,6 +699,7 @@ def _record_to_item(record: TestItemRecord) -> TestItemAsset:
         record_template=record.record_template,
         compliance_bug_info=getattr(record, "compliance_bug_info", None) or "",
         source_section_text=getattr(record, "source_section_text", None) or "",
+        source_blocks=getattr(record, "source_blocks", None) or [],
         evidence=record.evidence,
         status=record.status,
         created_at=record.created_at,

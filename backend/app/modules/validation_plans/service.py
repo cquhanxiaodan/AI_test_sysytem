@@ -111,6 +111,7 @@ def _build_plan(project_id: str, analyses: list) -> ValidationPlanRead:
                     record_template=(source_item.record_template if source_item is not None else "") or recommendation.record_template or "记录样本编号、测试条件、实际结果、判定结论和关联 BUG。",
                     compliance_bug_info=plan_compliance_bug_info(recommendation.title, source_item),
                     source_section_text=source_item.source_section_text if source_item is not None else "",
+                    source_blocks=source_item.source_blocks if source_item is not None else [],
                     evidence=(source_item.evidence if source_item is not None else "") or recommendation.evidence,
                 )
             )

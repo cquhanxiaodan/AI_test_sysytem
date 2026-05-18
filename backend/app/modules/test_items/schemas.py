@@ -24,6 +24,7 @@ class TestItemAsset(BaseModel):
     record_template: str
     compliance_bug_info: str = ""
     source_section_text: str = ""
+    source_blocks: list[dict] = []
     evidence: str
     status: str
     created_at: datetime

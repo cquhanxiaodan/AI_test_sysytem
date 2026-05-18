@@ -104,6 +104,8 @@ def ensure_test_item_columns(engine) -> None:
         statements.append("ALTER TABLE test_items ADD COLUMN compliance_bug_info TEXT DEFAULT ''")
     if "source_section_text" not in existing_columns:
         statements.append("ALTER TABLE test_items ADD COLUMN source_section_text TEXT DEFAULT ''")
+    if "source_blocks" not in existing_columns:
+        statements.append("ALTER TABLE test_items ADD COLUMN source_blocks JSON DEFAULT '[]'")
     if not statements:
         return
     with engine.begin() as connection:

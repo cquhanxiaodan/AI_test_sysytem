@@ -61,7 +61,16 @@ def render_validation_plan_docx(plan: ValidationPlanRead, template_path: Path, o
         }
     )
     template.save(output_path)
+    rewrite_summary_tables(output_path, plan)
     rewrite_test_item_section(output_path, plan)
+
+
+def rewrite_summary_tables(output_path: Path, plan: ValidationPlanRead) -> None:
+    document = Document(output_path)
+    replace_heading_body_with_table(document, "1.2 DUT描述", build_dut_table_rows(plan))
+    replace_heading_body_with_table(document, "1.3 参考文档", build_reference_table_rows(plan.reference_documents))
+    replace_heading_body_with_table(document, "2. 测试项目列表", build_test_project_table_rows(plan))
+    document.save(output_path)
 
 
 def rewrite_test_item_section(output_path: Path, plan: ValidationPlanRead) -> None:
@@ -72,6 +81,9 @@ def rewrite_test_item_section(output_path: Path, plan: ValidationPlanRead) -> No
     remove_paragraphs_after(document, start_index)
     for item in plan.items:
         document.add_heading(f"3.{item.sequence} {item.title}", level=3)
+        if has_source_blocks(item):
+            append_source_blocks(document, item.source_blocks)
+            continue
         add_test_item_subsection(document, item.sequence, 1, "测试目的/测试标准", item.objective)
         add_test_item_subsection(document, item.sequence, 2, "测试方法/原理", item.method)
         add_test_item_heading(document, item.sequence, 3, "测试工具")
@@ -84,6 +96,44 @@ def rewrite_test_item_section(output_path: Path, plan: ValidationPlanRead) -> No
         add_compliance_table(document, item.title, item.compliance_bug_info)
         add_bug_table(document)
     document.save(output_path)
+
+
+def replace_heading_body_with_table(document: Document, heading_text: str, rows: list[list[str]]) -> None:
+    index = next((index for index, paragraph in enumerate(document.paragraphs) if paragraph.text.strip() == heading_text), None)
+    if index is None:
+        return
+    next_heading_index = next((position for position in range(index + 1, len(document.paragraphs)) if document.paragraphs[position].style.name.startswith("Heading")), len(document.paragraphs))
+    for paragraph in list(document.paragraphs[index + 1 : next_heading_index]):
+        paragraph._element.getparent().remove(paragraph._element)
+    table = document.paragraphs[index]._p.addnext(document.add_table(rows=0, cols=len(rows[0]))._tbl)
+    inserted = next((candidate for candidate in document.tables if candidate._tbl is table), None)
+    target_table = inserted or document.tables[-1]
+    target_table.style = "Table Grid"
+    for row_values in rows:
+        row_cells = target_table.add_row().cells
+        set_table_row(row_cells, row_values)
+
+
+def build_dut_table_rows(plan: ValidationPlanRead) -> list[list[str]]:
+    test_objects = sorted({item.title for item in plan.items})
+    return [
+        ["序号", "名称", "型号", "物料编码/版本", "制造商", "物料编号", "测试数量"],
+        ["1", plan.dut_description or "待确认", "/", "/", "/", "/", str(max(len(test_objects), 1))],
+    ]
+
+
+def build_reference_table_rows(references: list[str]) -> list[list[str]]:
+    rows = [["序号", "名称", "编号", "版本", "创建人", "时间"]]
+    for index, reference in enumerate(references or ["测试规范"], start=1):
+        rows.append([str(index), reference, "/", "/", "/", "/"])
+    return rows
+
+
+def build_test_project_table_rows(plan: ValidationPlanRead) -> list[list[str]]:
+    rows = [["序号", "测试项目", "对应需求编号/DFMEA编号/风险管理编号/测试目的", "样本量", "预估测试用时（h）", "备注"]]
+    for item in plan.items:
+        rows.append([str(item.sequence), item.title, item.objective or item.evidence, "1", "/", item.group])
+    return rows
 
 
 def remove_paragraphs_after(document: Document, start_index: int) -> None:
@@ -133,6 +183,32 @@ def add_bug_table(document: Document) -> None:
     table.style = "Table Grid"
     set_table_row(table.rows[0].cells, ["序号", "问题描述", "涉及需求编号", "BUG编号（JIRA系统）", "RPN", "Bug解决状态"])
     set_table_row(table.rows[1].cells, ["1", "", "", "", "", ""])
+
+
+def has_source_blocks(item) -> bool:
+    return bool(item.source_blocks and item.source_type == "document") if hasattr(item, "source_type") else bool(item.source_blocks)
+
+
+def append_source_blocks(document: Document, blocks: list[dict]) -> None:
+    for block in blocks:
+        if block.get("type") == "table" and isinstance(block.get("rows"), list):
+            add_source_table(document, block["rows"])
+            continue
+        text = str(block.get("text") or "").strip()
+        if text:
+            document.add_paragraph(text)
+
+
+def add_source_table(document: Document, rows: list[list[str]]) -> None:
+    usable_rows = [row for row in rows if row]
+    if not usable_rows:
+        return
+    column_count = max(len(row) for row in usable_rows)
+    table = document.add_table(rows=len(usable_rows), cols=column_count)
+    table.style = "Table Grid"
+    for row_index, row_values in enumerate(usable_rows):
+        padded_values = [str(value) for value in row_values] + [""] * (column_count - len(row_values))
+        set_table_row(table.rows[row_index].cells, padded_values)
 
 
 def set_table_row(cells, values: list[str]) -> None:

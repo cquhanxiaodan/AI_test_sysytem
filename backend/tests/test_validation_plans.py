@@ -283,6 +283,75 @@ def test_validation_plan_export_renders_structured_tables() -> None:
     assert ("序号", "问题描述", "涉及需求编号", "BUG编号（JIRA系统）", "RPN", "Bug解决状态") in table_headers
 
 
+def test_validation_plan_export_renders_top_level_tables() -> None:
+    headers = auth_headers()
+    seed_assets(headers)
+    analysis_id = create_analysis(headers)
+    update_recommendation_status(headers, analysis_id, 0, "confirmed")
+    created = client.post("/api/validation-plans", headers=headers, json={"project_id": "project-g99-rfid"})
+    plan_id = created.json()["id"]
+
+    exported = client.post(f"/api/validation-plans/{plan_id}/export", headers=headers)
+
+    assert exported.status_code == 200
+    document = Document(exported.json()["storage_path"])
+    table_headers = [tuple(cell.text for cell in table.rows[0].cells) for table in document.tables]
+    assert ("序号", "名称", "型号", "物料编码/版本", "制造商", "物料编号", "测试数量") in table_headers
+    assert ("序号", "名称", "编号", "版本", "创建人", "时间") in table_headers
+    assert ("序号", "测试项目", "对应需求编号/DFMEA编号/风险管理编号/测试目的", "样本量", "预估测试用时（h）", "备注") in table_headers
+
+
+def test_validation_plan_export_uses_source_blocks_for_document_items() -> None:
+    headers = auth_headers()
+    content = """
+测试项目列表
+测试项目
+整机安装适配测试
+整机安装适配测试
+测试目的/测试标准
+检验RFID结构适配安装至整机是否存在异常。
+测试方法/原理
+整机安装适配。
+测试工具
+DNBSEQ-G99
+RFID 标签
+测试步骤
+RFID检查；
+RFID安装；
+测试记录
+记录结构干涉；记录线缆干涉。
+需求符合性和BUG信息
+通过时记录需求符合，失败时登记 BUG 编号。
+""".strip()
+    upload = client.post(
+        "/api/documents/upload",
+        headers=headers,
+        data={"project_id": "project-g99-rfid"},
+        files={"file": ("DNBSEQ-G99 RFID验证方案.txt", content.encode("utf-8"), "text/plain")},
+    )
+    document_id = upload.json()["document"]["id"]
+    client.post(f"/api/parsing/documents/{document_id}/parse", headers=headers)
+    split = client.post(f"/api/test-items/split/{document_id}", headers=headers)
+    item_id = split.json()["items"][0]["id"]
+    assert split.json()["items"][0]["source_blocks"]
+    client.post(f"/api/test-items/{item_id}/confirm", headers=headers)
+    package = client.post("/api/test-packages/generate-rfid-supplier-change?project_id=project-g99-rfid", headers=headers).json()
+    client.post(f"/api/test-packages/{package['id']}/publish", headers=headers)
+    analysis = create_analysis(headers)
+    update_recommendation_status(headers, analysis, 0, "confirmed")
+    created = client.post("/api/validation-plans", headers=headers, json={"project_id": "project-g99-rfid"})
+
+    exported = client.post(f"/api/validation-plans/{created.json()['id']}/export", headers=headers)
+
+    assert exported.status_code == 200
+    document = Document(exported.json()["storage_path"])
+    all_cells = [cell.text for table in document.tables for row in table.rows for cell in row.cells]
+    paragraphs = [paragraph.text for paragraph in document.paragraphs]
+    assert "DNBSEQ-G99" in all_cells
+    assert "RFID 标签" in all_cells
+    assert "检验RFID结构适配安装至整机是否存在异常。" in paragraphs
+
+
 def test_validation_plan_status_can_be_updated_and_export_marks_exported() -> None:
     headers = auth_headers()
     seed_assets(headers)
