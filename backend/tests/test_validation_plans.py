@@ -309,6 +309,24 @@ def test_validation_plan_export_renders_top_level_tables() -> None:
     assert ("序号", "测试项目", "对应需求编号/DFMEA编号/风险管理编号/测试目的", "样本量", "预估测试用时（h）", "备注") in table_headers
 
 
+def test_validation_plan_export_preserves_reference_template_styles() -> None:
+    headers = auth_headers()
+    seed_assets(headers)
+    analysis_id = create_analysis(headers)
+    update_recommendation_status(headers, analysis_id, 0, "confirmed")
+    created = client.post("/api/validation-plans", headers=headers, json={"project_id": "project-g99-rfid"})
+    plan_id = created.json()["id"]
+
+    exported = client.post(f"/api/validation-plans/{plan_id}/export", headers=headers)
+
+    assert exported.status_code == 200
+    document = Document(exported.json()["storage_path"])
+    paragraphs = [(paragraph.style.name, paragraph.text) for paragraph in document.paragraphs if paragraph.text.strip()]
+    assert ("Normal", "文档履历") in paragraphs
+    assert any(style == "Heading 1" and text == "概述" for style, text in paragraphs)
+    assert any(style == "Heading 1" and text == "测试项目" for style, text in paragraphs)
+
+
 def test_validation_plan_export_uses_source_blocks_for_document_items() -> None:
     headers = auth_headers()
     content = """

@@ -1,6 +1,5 @@
 from pathlib import Path
 
-from docxtpl import DocxTemplate
 from docx import Document
 from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
 
@@ -49,33 +48,29 @@ def ensure_default_template(template_path: Path) -> None:
 def render_validation_plan_docx(plan: ValidationPlanRead, template_path: Path, output_path: Path) -> None:
     ensure_default_template(template_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    template = DocxTemplate(template_path)
-    template.render(
-        {
-            "title": plan.title,
-            "generated_date": plan.created_at.date().isoformat(),
-            "overview": plan.overview,
-            "dut_description": plan.dut_description,
-            "reference_documents": plan.reference_documents,
-            "items": [item.model_dump() for item in plan.items],
-        }
-    )
-    template.save(output_path)
+    Document(template_path).save(output_path)
+    rewrite_overview_section(output_path, plan)
     rewrite_summary_tables(output_path, plan)
     rewrite_test_item_section(output_path, plan)
 
 
+def rewrite_overview_section(output_path: Path, plan: ValidationPlanRead) -> None:
+    document = Document(output_path)
+    replace_heading_body_with_paragraphs(document, ["1.1 验证的背景、目的和范围", "验证的背景、目的和范围"], [plan.overview])
+    document.save(output_path)
+
+
 def rewrite_summary_tables(output_path: Path, plan: ValidationPlanRead) -> None:
     document = Document(output_path)
-    replace_heading_body_with_table(document, "1.2 DUT描述", build_dut_table_rows(plan))
-    replace_heading_body_with_table(document, "1.3 参考文档", build_reference_table_rows(plan.reference_documents))
-    replace_heading_body_with_table(document, "2. 测试项目列表", build_test_project_table_rows(plan))
+    replace_heading_body_with_table(document, ["1.2 DUT描述", "DUT描述"], build_dut_table_rows(plan))
+    replace_heading_body_with_table(document, ["1.3 参考文档", "参考文档"], build_reference_table_rows(plan.reference_documents))
+    replace_heading_body_with_table(document, ["2. 测试项目列表", "测试项目列表"], build_test_project_table_rows(plan))
     document.save(output_path)
 
 
 def rewrite_test_item_section(output_path: Path, plan: ValidationPlanRead) -> None:
     document = Document(output_path)
-    start_index = next((index for index, paragraph in enumerate(document.paragraphs) if paragraph.text.strip() == "3. 测试项目"), None)
+    start_index = find_heading_index(document, ["3. 测试项目", "测试项目"])
     if start_index is None:
         return
     remove_paragraphs_after(document, start_index)
@@ -99,20 +94,47 @@ def rewrite_test_item_section(output_path: Path, plan: ValidationPlanRead) -> No
     document.save(output_path)
 
 
-def replace_heading_body_with_table(document: Document, heading_text: str, rows: list[list[str]]) -> None:
-    index = next((index for index, paragraph in enumerate(document.paragraphs) if paragraph.text.strip() == heading_text), None)
+def replace_heading_body_with_paragraphs(document: Document, heading_texts: list[str], values: list[str]) -> None:
+    index = find_heading_index(document, heading_texts)
     if index is None:
         return
-    next_heading_index = next((position for position in range(index + 1, len(document.paragraphs)) if document.paragraphs[position].style.name.startswith("Heading")), len(document.paragraphs))
-    for paragraph in list(document.paragraphs[index + 1 : next_heading_index]):
-        paragraph._element.getparent().remove(paragraph._element)
-    table = document.paragraphs[index]._p.addnext(document.add_table(rows=0, cols=len(rows[0]))._tbl)
-    inserted = next((candidate for candidate in document.tables if candidate._tbl is table), None)
-    target_table = inserted or document.tables[-1]
+    clear_heading_body(document, index)
+    anchor = document.paragraphs[index]._p
+    for value in reversed([value for value in values if value]):
+        paragraph = document.add_paragraph(value)
+        anchor.addnext(paragraph._p)
+
+
+def replace_heading_body_with_table(document: Document, heading_texts: list[str], rows: list[list[str]]) -> None:
+    index = find_heading_index(document, heading_texts)
+    if index is None:
+        return
+    clear_heading_body(document, index)
+    target_table = document.add_table(rows=len(rows), cols=len(rows[0]))
+    document.paragraphs[index]._p.addnext(target_table._tbl)
     target_table.style = "Table Grid"
-    for row_values in rows:
-        row_cells = target_table.add_row().cells
-        set_table_row(row_cells, row_values)
+    for row, row_values in zip(target_table.rows, rows):
+        set_table_row(row.cells, row_values)
+
+
+def find_heading_index(document: Document, heading_texts: list[str]) -> int | None:
+    targets = set(heading_texts)
+    return next((index for index, paragraph in enumerate(document.paragraphs) if paragraph.text.strip() in targets), None)
+
+
+def clear_heading_body(document: Document, heading_index: int) -> None:
+    heading = document.paragraphs[heading_index]
+    current = heading._p.getnext()
+    while current is not None:
+        if current.tag.endswith("}p"):
+            paragraph_text = "".join(node.text or "" for node in current.iter() if node.tag.endswith("}t")).strip()
+            paragraph = next((item for item in document.paragraphs if item._p is current), None)
+            if paragraph is not None and paragraph.style.name.startswith("Heading") and paragraph_text:
+                break
+        next_element = current.getnext()
+        if not current.tag.endswith("}sectPr"):
+            current.getparent().remove(current)
+        current = next_element
 
 
 def build_dut_table_rows(plan: ValidationPlanRead) -> list[list[str]]:
@@ -138,8 +160,12 @@ def build_test_project_table_rows(plan: ValidationPlanRead) -> list[list[str]]:
 
 
 def remove_paragraphs_after(document: Document, start_index: int) -> None:
-    for paragraph in list(document.paragraphs[start_index + 1 :]):
-        paragraph._element.getparent().remove(paragraph._element)
+    current = document.paragraphs[start_index]._p.getnext()
+    while current is not None:
+        next_element = current.getnext()
+        if not current.tag.endswith("}sectPr"):
+            current.getparent().remove(current)
+        current = next_element
 
 
 def add_test_item_subsection(document: Document, sequence: int, subsection: int, title: str, body: str) -> None:
