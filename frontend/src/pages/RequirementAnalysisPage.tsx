@@ -258,7 +258,7 @@ export default function RequirementAnalysisPage() {
     const updated = await includeRequirementRecommendationInLocal(analysis.id, item.id);
     setAnalysis(updated);
     refreshAnalyses(updated);
-    message.success("已纳入本地测试条目资产草稿，仍需确认后才会进入测试方案");
+    message.success("已纳入本地测试条目资产草稿，当前审核状态保持不变");
   }
 
   function statusTag(status: string) {

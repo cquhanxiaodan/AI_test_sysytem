@@ -412,7 +412,7 @@ def test_include_ai_recommendation_in_local_test_items(monkeypatch) -> None:
     assert included.status_code == 200
     updated = next(item for item in included.json()["recommendations"] if item["id"] == recommendation["id"])
     assert updated["source_type"] == "test_item"
-    assert updated["review_status"] == "pending"
+    assert updated["review_status"] == "confirmed"
     local_item = next(item for item in list_test_items("project-g99-rfid") if item.id == updated["source_id"])
     assert local_item.title == "新增 RFID 异常断电恢复测试"
     assert local_item.source_type == "ai_generated"

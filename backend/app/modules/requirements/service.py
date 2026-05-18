@@ -295,7 +295,6 @@ def include_recommendation_in_local_items(analysis_id: str, recommendation_id: s
                 "source_type": "test_item",
                 "source_id": local_item.id,
                 "reason": f"已纳入本地测试条目资产草稿：{local_item.title}",
-                "review_status": "pending",
             }
         )
         _save_analysis(analysis)
