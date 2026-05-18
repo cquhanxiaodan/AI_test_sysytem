@@ -95,27 +95,34 @@ def assign_item_to_package(item) -> TestPackageAsset:
 
 
 def package_name_for_item(item) -> str:
-    if is_rfid_related_item(item):
-        return RFID_SUPPLIER_PACKAGE_NAME
-    test_object = item.test_object or item.primary_subsystem or "待确认对象"
-    return f"{test_object} 变更验证包"
+    if item.module:
+        return RFID_SUPPLIER_PACKAGE_NAME if item.module == "RFID" else f"{item.module} 变更验证包"
+    subsystem = item.primary_subsystem or "待确认子系统"
+    return f"{subsystem} 变更验证包"
 
 
 def find_suitable_package_for_item(item, package_name: str) -> TestPackageAsset | None:
-    test_object = "RFID" if is_rfid_related_item(item) else (item.test_object or item.primary_subsystem or "待确认对象")
+    module = item.module or ""
+    subsystem = item.primary_subsystem or "待确认子系统"
+    test_object = module or subsystem
     change_type = "供应商变更" if "供应商变更" in item.risk_tags or is_rfid_related_item(item) else "变更验证"
+    packages = list_packages()
+    if module:
+        matched = next((package for package in packages if package.test_object == module and package.change_type == change_type), None)
+        if matched is not None:
+            return matched
     return next(
         (
             package
-            for package in list_packages(item.project_id)
+            for package in packages
             if package.test_object == test_object and package.change_type == change_type
         ),
         None,
-    ) or find_package_by_project_and_name(item.project_id, package_name)
+    ) or find_package_by_name(package_name)
 
 
 def create_package_for_item(item, package_name: str, package_item: TestPackageItem) -> TestPackageAsset:
-    test_object = "RFID" if is_rfid_related_item(item) else (item.test_object or item.primary_subsystem or "待确认对象")
+    test_object = item.module or item.primary_subsystem or "待确认对象"
     change_type = "供应商变更" if "供应商变更" in item.risk_tags or is_rfid_related_item(item) else "变更验证"
     return TestPackageAsset(
         id=f"pkg-{uuid4()}",
@@ -145,6 +152,11 @@ def upsert_package_item(items: list[TestPackageItem], package_item: TestPackageI
     if not replaced:
         updated.append(package_item)
     return updated
+
+
+def find_package_by_name(name: str) -> TestPackageAsset | None:
+    normalized_name = normalize_package_name(name)
+    return next((package for package in list_packages() if normalize_package_name(package.name) == normalized_name), None)
 
 
 def find_package_by_project_and_name(project_id: str, name: str) -> TestPackageAsset | None:

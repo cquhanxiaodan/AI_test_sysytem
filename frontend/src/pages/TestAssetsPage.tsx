@@ -109,12 +109,14 @@ export default function TestAssetsPage() {
 
   function openEditItem(item: TestItemAsset) {
     setEditingItem(item);
-    editForm.setFieldsValue(item);
+    editForm.setFieldsValue({ ...item, module: item.module ? [item.module] : [] } as unknown as TestItemUpdate);
   }
 
   async function saveEditingItem() {
     if (!editingItem) return;
-    await updateTestItem(editingItem.id, editForm.getFieldsValue());
+    const values = editForm.getFieldsValue() as TestItemUpdate & { module?: string[] | string };
+    const moduleValue = Array.isArray(values.module) ? values.module[0] || "" : values.module || "";
+    await updateTestItem(editingItem.id, { ...values, module: moduleValue });
     message.success("测试条目已更新");
     setEditingItem(null);
     await loadItems();
@@ -245,6 +247,7 @@ export default function TestAssetsPage() {
     { title: "所属项目", dataIndex: "project_id", render: (projectId) => projects.find((project) => project.id === projectId)?.name ?? projectId },
     { title: "对象", dataIndex: "test_object" },
     { title: "主子系统", dataIndex: "primary_subsystem" },
+    { title: "模块", dataIndex: "module", render: (value) => value || "-" },
     { title: "测试层级", dataIndex: "test_level" },
     { title: "测试类型", dataIndex: "test_type" },
     { title: "状态", dataIndex: "status", render: (status) => <Tag color="blue">{status}</Tag> },
@@ -323,7 +326,7 @@ export default function TestAssetsPage() {
       <Card className="section-card">
         <Typography.Title level={4}>自动生成规则</Typography.Title>
         <Typography.Paragraph>
-          在统一资料池上传资料并确认标签，管理员发布资料后，系统按文档类型自动处理：验证方案/测试规范生成测试条目和归口包，Jira/DFMEA 生成风险知识项。本页用于查看、审核和发布资产。
+          在统一资料池上传资料并确认标签，管理员发布资料后，系统按文档类型自动处理：验证方案/测试规范先生成测试条目，测试条目审核发布后再按模块或子系统归并到归口包；Jira/DFMEA 生成风险知识项。本页用于查看、审核和发布资产。
         </Typography.Paragraph>
       </Card>
       <Card>
@@ -335,7 +338,7 @@ export default function TestAssetsPage() {
               children: (
                 <Space direction="vertical" className="full-width" size="middle">
                   <Typography.Paragraph type="secondary">
-                    测试条目来自全局共享资产库，所有项目空间均可查看全部条目。资料池中的验证方案、测试规范、测试报告在管理员发布后会自动拆分；维护工具可对已上传资料重新补拆。
+                    测试条目来自全局共享资产库，所有项目空间均可查看全部条目。资料池中的验证方案、测试规范、测试报告在管理员发布后会自动拆分；测试条目发布后再进入归口包。
                   </Typography.Paragraph>
                   <Space>
                     <Button type="primary" disabled={selectedItemIds.length === 0} onClick={publishSelectedItems}>发布选中测试条目</Button>
@@ -359,7 +362,7 @@ export default function TestAssetsPage() {
               children: (
                 <Space direction="vertical" className="full-width" size="middle">
                   <Typography.Paragraph type="secondary">
-                    归口包由测试条目自动归并生成，作为全局共享资产用于需求分析阶段推荐必测、建议和条件触发测试。
+                    归口包由已发布测试条目自动归并生成，优先按模块匹配，没有模块时按系统配置中的子系统匹配。
                   </Typography.Paragraph>
                   <Button type="primary" disabled={selectedPackageIds.length === 0} onClick={publishSelectedPackages}>发布选中测试归口包</Button>
                   <Table
@@ -457,6 +460,9 @@ export default function TestAssetsPage() {
           </Form.Item>
           <Form.Item label="主子系统" name="primary_subsystem">
             <Select showSearch options={(systemConfig?.subsystem_catalog ?? []).map((value) => ({ label: value, value }))} />
+          </Form.Item>
+          <Form.Item label="模块" name="module">
+            <Select mode="tags" maxCount={1} tokenSeparators={[",", "，"]} options={["RFID"].map((value) => ({ label: value, value }))} />
           </Form.Item>
           <Form.Item label="关联子系统" name="related_subsystems">
             <Select mode="multiple" options={(systemConfig?.subsystem_catalog ?? []).map((value) => ({ label: value, value }))} />

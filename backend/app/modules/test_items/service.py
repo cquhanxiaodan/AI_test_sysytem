@@ -48,6 +48,7 @@ class TestItemRecord(Base):
     title: Mapped[str] = mapped_column(String(500))
     test_object: Mapped[str] = mapped_column(String(120), index=True)
     primary_subsystem: Mapped[str] = mapped_column(String(120), index=True)
+    module: Mapped[str] = mapped_column(String(120), default="", index=True)
     related_subsystems: Mapped[list[str]] = mapped_column(JSON)
     test_level: Mapped[str] = mapped_column(String(120))
     test_type: Mapped[str] = mapped_column(String(120))
@@ -132,7 +133,8 @@ def split_items_with_ai(project_id: str, document_id: str, filename: str, text: 
         "你是基因测序仪验证方案拆分助手。只输出 JSON，不输出解释。",
         (
             "从验证方案、测试规范或测试报告中拆分测试条目，输出 items 数组。"
-            "每个条目包含 title、test_object、primary_subsystem、related_subsystems、test_level、test_type、risk_tags、objective、method、tools、steps、connection_media、record_template、compliance_bug_info、source_section_text、evidence。"
+            "每个条目包含 title、test_object、primary_subsystem、module、related_subsystems、test_level、test_type、risk_tags、objective、method、tools、steps、connection_media、record_template、compliance_bug_info、source_section_text、evidence。"
+            f"primary_subsystem 必须从系统配置子系统字典中选择：{get_config().subsystem_catalog}。RFID 应作为 module，primary_subsystem 使用电子子系统。"
             "优先按 3.x 测试项目拆分，保留测试项目原始 7 段内容，缺失字段使用待确认。"
             f"\n文件名：{filename}"
             f"\n本地候选：{[item.title for item in fallback_items]}"
@@ -153,7 +155,8 @@ def split_items_with_ai(project_id: str, document_id: str, filename: str, text: 
                     source_document_id=document_id,
                     title=str(raw_item.get("title") or "资料来源测试条目"),
                     test_object=str(raw_item.get("test_object") or "待确认对象"),
-                    primary_subsystem=str(raw_item.get("primary_subsystem") or raw_item.get("subsystem") or "待确认子系统"),
+                    primary_subsystem=normalize_subsystem(str(raw_item.get("primary_subsystem") or raw_item.get("subsystem") or infer_subsystem_from_title(str(raw_item.get("title") or "")))),
+                    module=str(raw_item.get("module") or infer_module_from_title(str(raw_item.get("title") or ""))),
                     related_subsystems=[str(value) for value in raw_item.get("related_subsystems", []) if isinstance(value, str)],
                     test_level=str(raw_item.get("test_level") or "待确认层级"),
                     test_type=str(raw_item.get("test_type") or "功能测试"),
@@ -192,6 +195,10 @@ def update_item(item_id: str, payload: TestItemUpdate) -> TestItemAsset | None:
     updates = payload.model_dump(exclude_unset=True)
     if not updates:
         return item
+    if "primary_subsystem" in updates:
+        updates["primary_subsystem"] = normalize_subsystem(updates["primary_subsystem"])
+    if "module" in updates and updates["module"] == "RFID":
+        updates["primary_subsystem"] = normalize_subsystem("电子子系统")
     updated = item.model_copy(update={**updates, "status": "draft" if item.status != "draft" else item.status})
     _save_item(updated)
     return updated
@@ -220,7 +227,8 @@ def create_item_from_fields(
         updated = existing.model_copy(
             update={
                 "test_object": test_object,
-                "primary_subsystem": subsystem,
+                "primary_subsystem": normalize_subsystem(subsystem),
+                "module": infer_module_from_title(title),
                 "objective": objective,
                 "method": method,
                 "connection_media": "待补充",
@@ -238,7 +246,8 @@ def create_item_from_fields(
         source_document_id="ai-recommendation",
         title=title,
         test_object=test_object,
-        primary_subsystem=subsystem,
+        primary_subsystem=normalize_subsystem(subsystem),
+        module=infer_module_from_text(title, evidence),
         related_subsystems=[],
         test_level="待确认层级",
         test_type=infer_test_type(title),
@@ -427,7 +436,8 @@ def build_test_item(project_id: str, document_id: str, filename: str, title: str
         source_document_id=document_id,
         title=title,
         test_object="RFID" if "RFID" in title else "待确认对象",
-        primary_subsystem="RFID" if "RFID" in title else "待确认子系统",
+        primary_subsystem=normalize_subsystem(infer_subsystem_from_title(title)),
+        module=infer_module_from_title(title),
         related_subsystems=["整机系统"] if "安规" in title or "EMC" in title else [],
         test_level="系统级" if "安规" in title or "EMC" in title else "子系统级",
         test_type=infer_test_type(title),
@@ -466,6 +476,10 @@ def prefer_local_extracted_fields(item: TestItemAsset, filename: str, section: E
         updates["compliance_bug_info"] = section.compliance_bug_info
     if section.source_section_text:
         updates["source_section_text"] = section.source_section_text
+    inferred_module = infer_module_from_text(item.title, section.source_section_text)
+    if inferred_module:
+        updates["module"] = inferred_module
+        updates["primary_subsystem"] = normalize_subsystem("电子子系统")
     return item.model_copy(update=updates)
 
 
@@ -481,6 +495,26 @@ def infer_test_type(title: str) -> str:
     if "安规" in title or "EMC" in title:
         return "安规 EMC"
     return "功能测试"
+
+
+def infer_module_from_title(title: str) -> str:
+    return infer_module_from_text(title)
+
+
+def infer_module_from_text(*values: str) -> str:
+    searchable = " ".join(values).upper()
+    return "RFID" if "RFID" in searchable else ""
+
+
+def infer_subsystem_from_title(title: str) -> str:
+    return "电子子系统" if "RFID" in title.upper() else "待确认子系统"
+
+
+def normalize_subsystem(value: str) -> str:
+    config = get_config()
+    if value == "RFID":
+        value = "电子子系统"
+    return value if value in config.subsystem_catalog else (config.subsystem_catalog[0] if config.subsystem_catalog else value)
 
 
 def _use_sqlalchemy() -> bool:
@@ -503,6 +537,7 @@ def _item_to_record(item: TestItemAsset) -> TestItemRecord:
         title=item.title,
         test_object=item.test_object,
         primary_subsystem=item.primary_subsystem,
+        module=item.module,
         related_subsystems=item.related_subsystems,
         test_level=item.test_level,
         test_type=item.test_type,
@@ -528,7 +563,8 @@ def _record_to_item(record: TestItemRecord) -> TestItemAsset:
         source_document_id=record.source_document_id,
         title=record.title,
         test_object=record.test_object,
-        primary_subsystem=record.primary_subsystem,
+        primary_subsystem=normalize_subsystem(record.primary_subsystem),
+        module=getattr(record, "module", None) or infer_module_from_title(record.title),
         related_subsystems=record.related_subsystems or [],
         test_level=record.test_level,
         test_type=record.test_type,

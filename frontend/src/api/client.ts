@@ -84,6 +84,7 @@ export type TestItemAsset = {
   title: string;
   test_object: string;
   primary_subsystem: string;
+  module: string;
   related_subsystems: string[];
   test_level: string;
   test_type: string;
@@ -100,7 +101,7 @@ export type TestItemAsset = {
 
 export type TestItemUpdate = Partial<Pick<
   TestItemAsset,
-  "title" | "test_object" | "primary_subsystem" | "related_subsystems" | "test_level" | "test_type" | "risk_tags" | "objective" | "method" | "tools" | "steps" | "record_template"
+  "title" | "test_object" | "primary_subsystem" | "module" | "related_subsystems" | "test_level" | "test_type" | "risk_tags" | "objective" | "method" | "tools" | "steps" | "record_template"
 >>;
 
 export type TestItemBulkDeleteResult = {

@@ -10,6 +10,7 @@ class TestItemAsset(BaseModel):
     title: str
     test_object: str
     primary_subsystem: str
+    module: str = ""
     related_subsystems: list[str]
     test_level: str
     test_type: str
@@ -31,6 +32,7 @@ class TestItemUpdate(BaseModel):
     title: str | None = None
     test_object: str | None = None
     primary_subsystem: str | None = None
+    module: str | None = None
     related_subsystems: list[str] | None = None
     test_level: str | None = None
     test_type: str | None = None

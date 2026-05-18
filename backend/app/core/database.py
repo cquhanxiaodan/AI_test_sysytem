@@ -95,6 +95,8 @@ def ensure_test_item_columns(engine) -> None:
     statements = []
     if "connection_media" not in existing_columns:
         statements.append("ALTER TABLE test_items ADD COLUMN connection_media TEXT DEFAULT ''")
+    if "module" not in existing_columns:
+        statements.append("ALTER TABLE test_items ADD COLUMN module VARCHAR(120) DEFAULT ''")
     if "compliance_bug_info" not in existing_columns:
         statements.append("ALTER TABLE test_items ADD COLUMN compliance_bug_info TEXT DEFAULT ''")
     if "source_section_text" not in existing_columns:

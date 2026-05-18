@@ -141,6 +141,8 @@ DNBSEQ-G99
     assert install_item["connection_media"] == "整机安装照片见附件 A。"
     assert install_item["record_template"] == "记录结构干涉、线缆干涉和接头状态。"
     assert install_item["compliance_bug_info"] == "通过时记录需求符合，失败时登记 BUG 编号。"
+    assert install_item["primary_subsystem"] == "电子子系统"
+    assert install_item["module"] == "RFID"
     assert "测试目的/测试标准" in install_item["source_section_text"]
     assert install_item["evidence"] == "DNBSEQ-G99 RFID验证方案.txt"
 
@@ -256,6 +258,36 @@ def test_confirm_new_test_item_adds_to_existing_package() -> None:
     assert {item.test_item_id for item in package.items} == {first_item_id, second_item_id}
 
 
+def test_confirm_test_item_matches_package_globally_by_module() -> None:
+    headers = auth_headers()
+    first_upload = client.post(
+        "/api/documents/upload",
+        headers=headers,
+        data={"project_id": "project-g99-rfid"},
+        files={"file": ("RFID验证方案.txt", b"RFID", "text/plain")},
+    )
+    first_split = client.post(f"/api/test-items/split/{first_upload.json()['document']['id']}", headers=headers)
+    first_item_id = first_split.json()["items"][0]["id"]
+    client.post(f"/api/test-items/{first_item_id}/confirm", headers=headers)
+
+    second_upload = client.post(
+        "/api/documents/upload",
+        headers=headers,
+        data={"project_id": "project-mgi-platform"},
+        files={"file": ("另一项目RFID验证方案.txt", b"RFID", "text/plain")},
+    )
+    second_split = client.post(f"/api/test-items/split/{second_upload.json()['document']['id']}", headers=headers)
+    second_item_id = second_split.json()["items"][1]["id"]
+
+    response = client.post(f"/api/test-items/{second_item_id}/confirm", headers=headers)
+
+    assert response.status_code == 200
+    assert len(TEST_PACKAGES) == 1
+    package = next(iter(TEST_PACKAGES.values()))
+    assert package.test_object == "RFID"
+    assert {item.test_item_id for item in package.items} == {first_item_id, second_item_id}
+
+
 def test_update_test_item_allows_engineer_corrections() -> None:
     headers = auth_headers()
     upload = client.post(
@@ -283,6 +315,7 @@ def test_update_test_item_allows_engineer_corrections() -> None:
 
     assert response.status_code == 200
     assert response.json()["test_object"] == "RFID 读写模块"
+    assert response.json()["primary_subsystem"] == "电子子系统"
     assert response.json()["related_subsystems"] == ["整机系统"]
     assert response.json()["test_type"] == "回归测试"
 
@@ -369,6 +402,7 @@ def test_split_document_uses_ai_items(monkeypatch) -> None:
                     "title": "AI RFID 异常恢复测试",
                     "test_object": "RFID",
                     "primary_subsystem": "RFID",
+                    "module": "RFID",
                     "related_subsystems": ["整机系统"],
                     "test_level": "系统级",
                     "test_type": "异常恢复",
@@ -390,6 +424,8 @@ def test_split_document_uses_ai_items(monkeypatch) -> None:
 
     assert response.status_code == 200
     assert [item["title"] for item in response.json()["items"]] == ["AI RFID 异常恢复测试"]
+    assert response.json()["items"][0]["primary_subsystem"] == "电子子系统"
+    assert response.json()["items"][0]["module"] == "RFID"
 
 
 def test_test_item_list_is_global_when_project_filter_omitted() -> None:
