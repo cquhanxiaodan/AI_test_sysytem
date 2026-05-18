@@ -294,7 +294,7 @@ def test_validation_plan_export_body_paragraphs_have_consistent_indent() -> None
             assert paragraph.paragraph_format.left_indent == Pt(0)
             assert paragraph._p.pPr.ind.get(qn("w:leftChars")) == "0"
             assert paragraph._p.pPr.ind.get(qn("w:firstLine")) == "480"
-            assert paragraph._p.pPr.ind.get(qn("w:firstLineChars")) == "200"
+            assert paragraph._p.pPr.ind.get(qn("w:firstLineChars")) is None
 
 
 def test_validation_plan_export_renders_structured_tables() -> None:
@@ -392,6 +392,11 @@ def test_validation_plan_export_marks_toc_fields_for_refresh() -> None:
     update_fields = document.settings.element.find(qn("w:updateFields"))
     assert update_fields is not None
     assert update_fields.get(qn("w:val")) == "true"
+    field_instructions = [node.text for node in document.element.body.iter(qn("w:instrText"))]
+    assert any("TOC" in instruction for instruction in field_instructions if instruction)
+    assert any(field.get(qn("w:fldCharType")) == "begin" for field in document.element.body.iter(qn("w:fldChar")))
+    assert any(field.get(qn("w:fldCharType")) == "separate" for field in document.element.body.iter(qn("w:fldChar")))
+    assert any(field.get(qn("w:fldCharType")) == "end" for field in document.element.body.iter(qn("w:fldChar")))
 
 
 def test_validation_plan_export_rebuilds_toc_with_current_items() -> None:

@@ -121,9 +121,8 @@ def rebuild_table_of_contents(output_path: Path, plan: ValidationPlanRead) -> No
         document.save(output_path)
         return
     anchor = toc_element
-    for title, page_number, is_title in reversed(build_toc_lines(plan)):
-        paragraph = document.add_paragraph()
-        apply_toc_paragraph(paragraph, title, page_number, is_title)
+    toc_paragraphs = build_toc_paragraphs(document, plan)
+    for paragraph in reversed(toc_paragraphs):
         anchor.addnext(paragraph._p)
     toc_element.getparent().remove(toc_element)
     document.save(output_path)
@@ -150,6 +149,53 @@ def build_toc_lines(plan: ValidationPlanRead) -> list[tuple[str, int | None, boo
     for item in plan.items:
         lines.append((f"3.{item.sequence} {item.title}", 5, False))
     return lines
+
+
+def build_toc_paragraphs(document: Document, plan: ValidationPlanRead):
+    paragraphs = []
+    for title, page_number, is_title in build_toc_lines(plan):
+        paragraph = document.add_paragraph()
+        apply_toc_paragraph(paragraph, title, page_number, is_title)
+        paragraphs.append(paragraph)
+        if is_title:
+            paragraphs.extend(build_toc_field_start(document))
+    paragraphs.extend(build_toc_field_end(document))
+    return paragraphs
+
+
+def build_toc_field_start(document: Document):
+    begin = document.add_paragraph()
+    begin_run = begin.add_run()
+    begin_run._r.append(make_field_char("begin", dirty=True))
+    instruction = document.add_paragraph()
+    instruction_run = instruction.add_run()
+    instruction_run._r.append(make_instruction_text(' TOC \\o "1-3" \\h \\z \\u '))
+    separate = document.add_paragraph()
+    separate_run = separate.add_run()
+    separate_run._r.append(make_field_char("separate"))
+    return [begin, instruction, separate]
+
+
+def build_toc_field_end(document: Document):
+    paragraph = document.add_paragraph()
+    run = paragraph.add_run()
+    run._r.append(make_field_char("end"))
+    return [paragraph]
+
+
+def make_field_char(field_type: str, dirty: bool = False):
+    field_char = OxmlElement("w:fldChar")
+    field_char.set(qn("w:fldCharType"), field_type)
+    if dirty:
+        field_char.set(qn("w:dirty"), "true")
+    return field_char
+
+
+def make_instruction_text(text: str):
+    instruction = OxmlElement("w:instrText")
+    instruction.set(qn("xml:space"), "preserve")
+    instruction.text = text
+    return instruction
 
 
 def apply_toc_paragraph(paragraph, title: str, page_number: int | None, is_title: bool) -> None:
@@ -268,7 +314,7 @@ def reset_body_indent(paragraph) -> None:
     paragraph.paragraph_format.right_indent = Pt(0)
     paragraph.paragraph_format.space_before = Pt(0)
     paragraph.paragraph_format.space_after = Pt(0)
-    set_paragraph_indent_xml(paragraph, first_line="480", first_line_chars="200")
+    set_paragraph_indent_xml(paragraph, first_line="480", first_line_chars=None)
 
 
 def add_tools_table(document: Document, tools: list[str]) -> None:
@@ -343,7 +389,8 @@ def append_source_blocks(document: Document, blocks: list[dict]) -> None:
             continue
         text = str(block.get("text") or "").strip()
         if text:
-            document.add_paragraph(text)
+            paragraph = document.add_paragraph(text)
+            reset_body_indent(paragraph)
 
 
 def add_source_table(document: Document, rows: list[list[str]]) -> None:
@@ -380,7 +427,7 @@ def reset_paragraph_indent_xml(paragraph) -> None:
     set_paragraph_indent_xml(paragraph)
 
 
-def set_paragraph_indent_xml(paragraph, first_line: str = "0", first_line_chars: str = "0") -> None:
+def set_paragraph_indent_xml(paragraph, first_line: str = "0", first_line_chars: str | None = "0") -> None:
     paragraph_properties = paragraph._p.get_or_add_pPr()
     indent = paragraph_properties.find(qn("w:ind"))
     if indent is None:
@@ -389,7 +436,10 @@ def set_paragraph_indent_xml(paragraph, first_line: str = "0", first_line_chars:
     for attribute in ("w:left", "w:right", "w:hanging", "w:leftChars", "w:rightChars", "w:hangingChars"):
         indent.set(qn(attribute), "0")
     indent.set(qn("w:firstLine"), first_line)
-    indent.set(qn("w:firstLineChars"), first_line_chars)
+    if first_line_chars is None:
+        indent.attrib.pop(qn("w:firstLineChars"), None)
+    else:
+        indent.set(qn("w:firstLineChars"), first_line_chars)
 
 
 def split_record_lines(record_template: str) -> list[str]:
