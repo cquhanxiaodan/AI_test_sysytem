@@ -344,6 +344,35 @@ def test_update_test_item_allows_engineer_corrections() -> None:
     assert response.json()["test_type"] == "回归测试"
 
 
+def test_update_rfid_module_uses_configured_electronic_subsystem() -> None:
+    headers = auth_headers()
+    config_response = client.put(
+        "/api/admin/config",
+        headers=headers,
+        json={"subsystem_catalog": ["流体系统", "电子系统", "整机系统"]},
+    )
+    assert config_response.status_code == 200
+    upload = client.post(
+        "/api/documents/upload",
+        headers=headers,
+        data={"project_id": "project-g99-rfid"},
+        files={"file": ("RFID验证方案.txt", b"RFID", "text/plain")},
+    )
+    split = client.post(f"/api/test-items/split/{upload.json()['document']['id']}", headers=headers)
+    item_id = split.json()["items"][0]["id"]
+
+    response = client.patch(
+        f"/api/test-items/{item_id}",
+        headers=headers,
+        json={"primary_subsystem": "电子系统", "module": "RFID", "related_subsystems": ["整机系统"]},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["primary_subsystem"] == "电子系统"
+    assert response.json()["module"] == "RFID"
+    assert response.json()["related_subsystems"] == ["整机系统"]
+
+
 def test_update_test_item_normalizes_unknown_test_type_to_config() -> None:
     headers = auth_headers()
     config_response = client.put(

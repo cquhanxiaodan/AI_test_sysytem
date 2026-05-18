@@ -531,9 +531,14 @@ def infer_subsystem_from_title(title: str) -> str:
 
 def normalize_subsystem(value: str) -> str:
     config = get_config()
-    if value == "RFID":
-        value = "电子子系统"
+    if value in {"RFID", "电子子系统", "电子系统"}:
+        electronic_subsystem = find_electronic_subsystem(config.subsystem_catalog)
+        return electronic_subsystem if electronic_subsystem else value
     return value if value in config.subsystem_catalog else (config.subsystem_catalog[0] if config.subsystem_catalog else value)
+
+
+def find_electronic_subsystem(candidates: list[str]) -> str:
+    return next((value for value in candidates if "电子" in value), "")
 
 
 def _use_sqlalchemy() -> bool:
