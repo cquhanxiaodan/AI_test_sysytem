@@ -318,6 +318,9 @@ def test_validation_plan_export_renders_top_level_tables() -> None:
         assert cell.paragraphs[0].alignment == WD_PARAGRAPH_ALIGNMENT.CENTER
         assert cell.paragraphs[0].paragraph_format.first_line_indent == Pt(0)
         assert cell.paragraphs[0].paragraph_format.left_indent == Pt(0)
+        indent = cell.paragraphs[0]._p.pPr.ind
+        assert indent.get(qn("w:firstLineChars")) == "0"
+        assert indent.get(qn("w:leftChars")) == "0"
 
 
 def test_validation_plan_export_preserves_reference_template_styles() -> None:
@@ -353,7 +356,24 @@ def test_validation_plan_export_marks_toc_fields_for_refresh() -> None:
     update_fields = document.settings.element.find(qn("w:updateFields"))
     assert update_fields is not None
     assert update_fields.get(qn("w:val")) == "true"
-    assert any(field_char.get(qn("w:dirty")) == "true" for field_char in document.element.body.iter(qn("w:fldChar")))
+
+
+def test_validation_plan_export_rebuilds_toc_with_current_items() -> None:
+    headers = auth_headers()
+    seed_assets(headers)
+    analysis_id = create_analysis(headers)
+    update_recommendation_status(headers, analysis_id, 0, "confirmed")
+    created = client.post("/api/validation-plans", headers=headers, json={"project_id": "project-g99-rfid"})
+    plan_id = created.json()["id"]
+    expected_title = created.json()["items"][0]["title"]
+
+    exported = client.post(f"/api/validation-plans/{plan_id}/export", headers=headers)
+
+    assert exported.status_code == 200
+    document = Document(exported.json()["storage_path"])
+    body_text = "\n".join(paragraph.text for paragraph in document.paragraphs)
+    assert f"3.1 {expected_title}" in body_text
+    assert "整机安装适配测试" not in body_text
 
 
 def test_validation_plan_export_uses_source_blocks_for_document_items() -> None:

@@ -6,6 +6,7 @@ from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Pt
+from lxml import etree
 
 from app.modules.validation_plans.schemas import ValidationPlanRead
 
@@ -56,6 +57,7 @@ def render_validation_plan_docx(plan: ValidationPlanRead, template_path: Path, o
     rewrite_overview_section(output_path, plan)
     rewrite_summary_tables(output_path, plan)
     rewrite_test_item_section(output_path, plan)
+    rebuild_table_of_contents(output_path, plan)
     prepare_fields_for_refresh(output_path)
 
 
@@ -110,6 +112,43 @@ def prepare_fields_for_refresh(output_path: Path) -> None:
     for field_char in document.element.body.iter(qn("w:fldChar")):
         field_char.set(qn("w:dirty"), "true")
     document.save(output_path)
+
+
+def rebuild_table_of_contents(output_path: Path, plan: ValidationPlanRead) -> None:
+    document = Document(output_path)
+    toc_element = find_toc_element(document)
+    if toc_element is None:
+        document.save(output_path)
+        return
+    anchor = toc_element
+    for text in reversed(build_toc_lines(plan)):
+        paragraph = document.add_paragraph(text)
+        anchor.addnext(paragraph._p)
+    toc_element.getparent().remove(toc_element)
+    document.save(output_path)
+
+
+def find_toc_element(document: Document):
+    for child in document.element.body.iterchildren():
+        child_xml = etree.tostring(child, encoding="unicode")
+        if child.tag == qn("w:sdt") and "TOC" in child_xml:
+            return child
+    return None
+
+
+def build_toc_lines(plan: ValidationPlanRead) -> list[str]:
+    lines: list[str] = [
+        "目 录",
+        "1 概述",
+        "1.1 验证的背景、目的和范围",
+        "1.2 DUT描述",
+        "1.3 参考文档",
+        "2 测试项目列表",
+        "3 测试项目",
+    ]
+    for item in plan.items:
+        lines.append(f"3.{item.sequence} {item.title}")
+    return lines
 
 
 def replace_heading_body_with_paragraphs(document: Document, heading_texts: list[str], values: list[str]) -> None:
@@ -270,6 +309,17 @@ def set_table_row(cells, values: list[str]) -> None:
             paragraph.paragraph_format.right_indent = Pt(0)
             paragraph.paragraph_format.space_before = Pt(0)
             paragraph.paragraph_format.space_after = Pt(0)
+            reset_paragraph_indent_xml(paragraph)
+
+
+def reset_paragraph_indent_xml(paragraph) -> None:
+    paragraph_properties = paragraph._p.get_or_add_pPr()
+    indent = paragraph_properties.find(qn("w:ind"))
+    if indent is None:
+        indent = OxmlElement("w:ind")
+        paragraph_properties.append(indent)
+    for attribute in ("w:left", "w:right", "w:firstLine", "w:hanging", "w:leftChars", "w:rightChars", "w:firstLineChars", "w:hangingChars"):
+        indent.set(qn(attribute), "0")
 
 
 def split_record_lines(record_template: str) -> list[str]:
