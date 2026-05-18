@@ -98,9 +98,12 @@ RFID 标签
 RFID检查；
 RFID安装；
 整机外壳安装；
+测试连接图或照片
+整机安装照片见附件 A。
 测试记录
 记录结构干涉、线缆干涉和接头状态。
 需求符合性和BUG信息
+通过时记录需求符合，失败时登记 BUG 编号。
 RFID装配后初始化测试
 测试目的/测试标准
 评估RFID装机后与整机系统及软件适配情况。
@@ -132,7 +135,10 @@ DNBSEQ-G99
     assert install_item["method"] == "整机安装适配。"
     assert install_item["tools"] == ["DNBSEQ-G99", "RFID 标签"]
     assert install_item["steps"] == ["RFID检查", "RFID安装", "整机外壳安装"]
+    assert install_item["connection_media"] == "整机安装照片见附件 A。"
     assert install_item["record_template"] == "记录结构干涉、线缆干涉和接头状态。"
+    assert install_item["compliance_bug_info"] == "通过时记录需求符合，失败时登记 BUG 编号。"
+    assert "测试目的/测试标准" in install_item["source_section_text"]
     assert install_item["evidence"] == "DNBSEQ-G99 RFID验证方案.txt"
 
 

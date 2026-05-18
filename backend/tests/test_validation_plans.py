@@ -188,6 +188,57 @@ def test_validation_plan_items_carry_requirement_fields() -> None:
     assert item["record_template"]
 
 
+def test_validation_plan_items_reuse_full_test_item_content() -> None:
+    headers = auth_headers()
+    content = """
+测试项目列表
+测试项目
+整机安装适配测试
+整机安装适配测试
+测试目的/测试标准
+检验RFID结构适配安装至整机是否存在异常。
+测试方法/原理
+整机安装适配。
+测试工具
+DNBSEQ-G99
+RFID 标签
+测试步骤
+RFID检查；
+RFID安装；
+整机外壳安装；
+测试连接图或照片
+整机安装照片见附件 A。
+测试记录
+记录结构干涉、线缆干涉和接头状态。
+需求符合性和BUG信息
+通过时记录需求符合，失败时登记 BUG 编号。
+""".strip()
+    upload = client.post(
+        "/api/documents/upload",
+        headers=headers,
+        data={"project_id": "project-g99-rfid"},
+        files={"file": ("DNBSEQ-G99 RFID验证方案.txt", content.encode("utf-8"), "text/plain")},
+    )
+    document_id = upload.json()["document"]["id"]
+    client.post(f"/api/parsing/documents/{document_id}/parse", headers=headers)
+    split = client.post(f"/api/test-items/split/{document_id}", headers=headers)
+    item_id = split.json()["items"][0]["id"]
+    client.post("/api/test-packages/generate-rfid-supplier-change?project_id=project-g99-rfid", headers=headers)
+
+    analysis = create_analysis(headers)
+    update_recommendation_status(headers, analysis, 0, "confirmed")
+    created = client.post("/api/validation-plans", headers=headers, json={"project_id": "project-g99-rfid"})
+
+    assert created.status_code == 200
+    item = created.json()["items"][0]
+    assert item_id
+    assert item["tools"] == ["DNBSEQ-G99", "RFID 标签"]
+    assert item["steps"] == ["RFID检查", "RFID安装", "整机外壳安装"]
+    assert item["connection_media"] == "整机安装照片见附件 A。"
+    assert item["compliance_bug_info"] == "通过时记录需求符合，失败时登记 BUG 编号。"
+    assert "测试目的/测试标准" in item["source_section_text"]
+
+
 def test_validation_plan_status_can_be_updated_and_export_marks_exported() -> None:
     headers = auth_headers()
     seed_assets(headers)

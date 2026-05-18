@@ -67,6 +67,7 @@ def init_database() -> None:
     engine = get_engine()
     Base.metadata.create_all(bind=engine)
     ensure_requirement_analysis_columns(engine)
+    ensure_test_item_columns(engine)
 
 
 def ensure_requirement_analysis_columns(engine) -> None:
@@ -79,6 +80,25 @@ def ensure_requirement_analysis_columns(engine) -> None:
         statements.append("ALTER TABLE requirement_analyses ADD COLUMN ai_status VARCHAR(80) DEFAULT 'not_configured'")
     if "ai_message" not in existing_columns:
         statements.append("ALTER TABLE requirement_analyses ADD COLUMN ai_message VARCHAR(1000) DEFAULT 'AI 未配置，已使用本地规则推荐。'")
+    if not statements:
+        return
+    with engine.begin() as connection:
+        for statement in statements:
+            connection.execute(text(statement))
+
+
+def ensure_test_item_columns(engine) -> None:
+    inspector = inspect(engine)
+    if "test_items" not in inspector.get_table_names():
+        return
+    existing_columns = {column["name"] for column in inspector.get_columns("test_items")}
+    statements = []
+    if "connection_media" not in existing_columns:
+        statements.append("ALTER TABLE test_items ADD COLUMN connection_media TEXT DEFAULT ''")
+    if "compliance_bug_info" not in existing_columns:
+        statements.append("ALTER TABLE test_items ADD COLUMN compliance_bug_info TEXT DEFAULT ''")
+    if "source_section_text" not in existing_columns:
+        statements.append("ALTER TABLE test_items ADD COLUMN source_section_text TEXT DEFAULT ''")
     if not statements:
         return
     with engine.begin() as connection:

@@ -32,18 +32,16 @@ def ensure_default_template(template_path: Path) -> None:
     document.add_paragraph("{% for item in items %}{{ item.sequence }}. {{ item.title }}（{{ item.group }}）\n{% endfor %}")
 
     document.add_heading("3. 测试项目", level=2)
-    document.add_paragraph(
-        "{% for item in items %}"
-        "3.{{ item.sequence }} {{ item.title }}\n"
-        "3.{{ item.sequence }}.1 测试目的/测试标准\n{{ item.objective }}\n"
-        "3.{{ item.sequence }}.2 测试方法/原理\n{{ item.method }}\n"
-        "3.{{ item.sequence }}.3 测试工具\n待确认\n"
-        "3.{{ item.sequence }}.4 测试步骤\n按模板执行并记录过程数据。\n"
-        "3.{{ item.sequence }}.5 测试连接图或照片\n待补充\n"
-        "3.{{ item.sequence }}.6 测试记录\n{{ item.record_template }}\n"
-        "3.{{ item.sequence }}.7 需求符合性和BUG信息\n{{ item.evidence }}\n\n"
-        "{% endfor %}"
-    )
+    document.add_paragraph("{% for item in items %}3.{{ item.sequence }} {{ item.title }}")
+    document.add_paragraph("3.{{ item.sequence }}.1 测试目的/测试标准\n{{ item.objective }}")
+    document.add_paragraph("3.{{ item.sequence }}.2 测试方法/原理\n{{ item.method }}")
+    document.add_paragraph("3.{{ item.sequence }}.3 测试工具\n{% for tool in item.tools %}{{ loop.index }}. {{ tool }}\n{% endfor %}")
+    document.add_paragraph("3.{{ item.sequence }}.4 测试步骤\n{% for step in item.steps %}{{ loop.index }}. {{ step }}\n{% endfor %}")
+    document.add_paragraph("3.{{ item.sequence }}.5 测试连接图或照片\n{{ item.connection_media }}")
+    document.add_paragraph("3.{{ item.sequence }}.6 测试记录\n{{ item.record_template }}")
+    document.add_paragraph("3.{{ item.sequence }}.7 需求符合性和BUG信息\n{{ item.compliance_bug_info }}\n依据：{{ item.evidence }}")
+    document.add_paragraph("{% if item.source_section_text %}原始测试项目章节\n{{ item.source_section_text }}{% endif %}")
+    document.add_paragraph("{% endfor %}")
     document.save(template_path)
 
 

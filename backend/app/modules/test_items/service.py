@@ -19,7 +19,9 @@ SECTION_LABELS = {
     "method": ["测试方法/原理", "测试方法", "测试原理"],
     "tools": ["测试工具"],
     "steps": ["测试步骤"],
+    "connection_media": ["测试连接图或照片"],
     "record_template": ["测试记录", "记录模板"],
+    "compliance_bug_info": ["需求符合性和BUG信息", "需求符合性结果", "测试发现的BUG信息表"],
 }
 BOUNDARY_LABELS = [
     "测试目的/测试标准",
@@ -45,7 +47,10 @@ class ExtractedTestSection:
     method: str = ""
     tools: list[str] | None = None
     steps: list[str] | None = None
+    connection_media: str = ""
     record_template: str = ""
+    compliance_bug_info: str = ""
+    source_section_text: str = ""
 
 
 class TestItemRecord(Base):
@@ -65,7 +70,10 @@ class TestItemRecord(Base):
     method: Mapped[str] = mapped_column(Text)
     tools: Mapped[list[str]] = mapped_column(JSON)
     steps: Mapped[list[str]] = mapped_column(JSON)
+    connection_media: Mapped[str] = mapped_column(Text, default="")
     record_template: Mapped[str] = mapped_column(Text)
+    compliance_bug_info: Mapped[str] = mapped_column(Text, default="")
+    source_section_text: Mapped[str] = mapped_column(Text, default="")
     evidence: Mapped[str] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(80), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
@@ -137,8 +145,8 @@ def split_items_with_ai(project_id: str, document_id: str, filename: str, text: 
         "你是基因测序仪验证方案拆分助手。只输出 JSON，不输出解释。",
         (
             "从验证方案、测试规范或测试报告中拆分测试条目，输出 items 数组。"
-            "每个条目包含 title、test_object、primary_subsystem、related_subsystems、test_level、test_type、risk_tags、objective、method、tools、steps、record_template、evidence。"
-            "优先按 3.x 测试项目拆分，保留本地证据，缺失字段使用待确认。"
+            "每个条目包含 title、test_object、primary_subsystem、related_subsystems、test_level、test_type、risk_tags、objective、method、tools、steps、connection_media、record_template、compliance_bug_info、source_section_text、evidence。"
+            "优先按 3.x 测试项目拆分，保留测试项目原始 7 段内容，缺失字段使用待确认。"
             f"\n文件名：{filename}"
             f"\n本地候选：{[item.title for item in fallback_items]}"
             f"\n资料内容：\n{text[:8000]}"
@@ -167,7 +175,10 @@ def split_items_with_ai(project_id: str, document_id: str, filename: str, text: 
                     method=str(raw_item.get("method") or "待测试工程师确认方法和标准。"),
                     tools=[str(value) for value in raw_item.get("tools", []) if isinstance(value, str)],
                     steps=[str(value) for value in raw_item.get("steps", []) if isinstance(value, str)],
+                    connection_media=str(raw_item.get("connection_media") or "待补充"),
                     record_template=str(raw_item.get("record_template") or "记录测试条件、实际结果、判定结论和关联 BUG。"),
+                    compliance_bug_info=str(raw_item.get("compliance_bug_info") or "记录需求符合性结论和关联 BUG 信息。"),
+                    source_section_text=str(raw_item.get("source_section_text") or ""),
                     evidence=filename,
                     status="draft",
                     created_at=datetime.now(UTC),
@@ -225,7 +236,9 @@ def create_item_from_fields(
                 "primary_subsystem": subsystem,
                 "objective": objective,
                 "method": method,
+                "connection_media": "待补充",
                 "record_template": record_template,
+                "compliance_bug_info": "记录需求符合性结论和关联 BUG 信息。",
                 "evidence": evidence,
                 "status": "published",
             }
@@ -247,7 +260,10 @@ def create_item_from_fields(
         method=method,
         tools=[],
         steps=[f"执行{title}", "记录测试结果并判断是否符合验收标准"],
+        connection_media="待补充",
         record_template=record_template,
+        compliance_bug_info="记录需求符合性结论和关联 BUG 信息。",
+        source_section_text="",
         evidence=evidence,
         status="published",
         created_at=datetime.now(UTC),
@@ -299,7 +315,10 @@ def extract_test_sections(text: str) -> list[ExtractedTestSection]:
                 method=extract_labeled_text(section_lines, SECTION_LABELS["method"]),
                 tools=split_list_text(extract_labeled_text(section_lines, SECTION_LABELS["tools"])),
                 steps=split_list_text(extract_labeled_text(section_lines, SECTION_LABELS["steps"])),
+                connection_media=extract_labeled_text(section_lines, SECTION_LABELS["connection_media"]),
                 record_template=extract_labeled_text(section_lines, SECTION_LABELS["record_template"]),
+                compliance_bug_info=extract_labeled_text(section_lines, SECTION_LABELS["compliance_bug_info"]),
+                source_section_text="\n".join([title, *section_lines]).strip(),
             )
         )
     return sections
@@ -397,6 +416,9 @@ def build_test_item(project_id: str, document_id: str, filename: str, title: str
     tools = section.tools if section and section.tools else ["DNBSEQ-G99", "RFID 标签", "测试工装"]
     steps = section.steps if section and section.steps else ["准备 DUT 和测试环境", f"执行{title}", "记录结果并判断是否符合验收标准"]
     record_template = section.record_template if section and section.record_template else "记录样本编号、测试步骤、实际结果、判定结论和关联 BUG。"
+    connection_media = section.connection_media if section and section.connection_media else "待补充"
+    compliance_bug_info = section.compliance_bug_info if section and section.compliance_bug_info else "记录需求符合性结论和关联 BUG 信息。"
+    source_section_text = section.source_section_text if section and section.source_section_text else ""
     return TestItemAsset(
         id=f"item-{uuid4()}",
         project_id=project_id,
@@ -412,7 +434,10 @@ def build_test_item(project_id: str, document_id: str, filename: str, title: str
         method=method,
         tools=tools,
         steps=steps,
+        connection_media=connection_media,
         record_template=record_template,
+        compliance_bug_info=compliance_bug_info,
+        source_section_text=source_section_text,
         evidence=filename,
         status="draft",
         created_at=datetime.now(UTC),
@@ -431,8 +456,14 @@ def prefer_local_extracted_fields(item: TestItemAsset, filename: str, section: E
         updates["tools"] = section.tools
     if section.steps:
         updates["steps"] = section.steps
+    if section.connection_media:
+        updates["connection_media"] = section.connection_media
     if section.record_template:
         updates["record_template"] = section.record_template
+    if section.compliance_bug_info:
+        updates["compliance_bug_info"] = section.compliance_bug_info
+    if section.source_section_text:
+        updates["source_section_text"] = section.source_section_text
     return item.model_copy(update=updates)
 
 
@@ -478,7 +509,10 @@ def _item_to_record(item: TestItemAsset) -> TestItemRecord:
         method=item.method,
         tools=item.tools,
         steps=item.steps,
+        connection_media=item.connection_media,
         record_template=item.record_template,
+        compliance_bug_info=item.compliance_bug_info,
+        source_section_text=item.source_section_text,
         evidence=item.evidence,
         status=item.status,
         created_at=item.created_at,
@@ -501,7 +535,10 @@ def _record_to_item(record: TestItemRecord) -> TestItemAsset:
         method=record.method,
         tools=record.tools or [],
         steps=record.steps or [],
+        connection_media=getattr(record, "connection_media", None) or "",
         record_template=record.record_template,
+        compliance_bug_info=getattr(record, "compliance_bug_info", None) or "",
+        source_section_text=getattr(record, "source_section_text", None) or "",
         evidence=record.evidence,
         status=record.status,
         created_at=record.created_at,

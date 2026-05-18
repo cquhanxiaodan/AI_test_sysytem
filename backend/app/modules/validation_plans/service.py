@@ -9,6 +9,8 @@ from app.core.config import get_settings
 from app.core.database import Base, session_scope
 from app.modules.ai.service import run_json_task
 from app.modules.requirements.service import get_analysis, list_analyses
+from app.modules.test_items.service import get_item
+from app.modules.test_packages.service import get_package
 from app.modules.validation_plans.docx_exporter import render_validation_plan_docx
 from app.modules.validation_plans.schemas import (
     ExportRecord,
@@ -95,15 +97,21 @@ def _build_plan(project_id: str, analyses: list) -> ValidationPlanRead:
             if recommendation.title in seen_titles:
                 continue
             seen_titles.add(recommendation.title)
+            source_item = resolve_recommendation_test_item(recommendation)
             all_items.append(
                 ValidationPlanItem(
                     sequence=len(all_items) + 1,
                     title=recommendation.title,
                     group=recommendation.group,
-                    objective=recommendation.objective or f"验证{recommendation.title}满足需求。",
-                    method=recommendation.method or "按既有验证方案模板执行测试步骤并记录结果。",
-                    record_template=recommendation.record_template or "记录样本编号、测试条件、实际结果、判定结论和关联 BUG。",
-                    evidence=recommendation.evidence,
+                    objective=(source_item.objective if source_item is not None else "") or recommendation.objective or f"验证{recommendation.title}满足需求。",
+                    method=(source_item.method if source_item is not None else "") or recommendation.method or "按既有验证方案模板执行测试步骤并记录结果。",
+                    tools=source_item.tools if source_item is not None else [],
+                    steps=source_item.steps if source_item is not None else [],
+                    connection_media=(source_item.connection_media if source_item is not None else "") or "待补充",
+                    record_template=(source_item.record_template if source_item is not None else "") or recommendation.record_template or "记录样本编号、测试条件、实际结果、判定结论和关联 BUG。",
+                    compliance_bug_info=(source_item.compliance_bug_info if source_item is not None else "") or "记录需求符合性结论和关联 BUG 信息。",
+                    source_section_text=source_item.source_section_text if source_item is not None else "",
+                    evidence=(source_item.evidence if source_item is not None else "") or recommendation.evidence,
                 )
             )
     overview_prefix = f"针对 {len(analyses)} 条需求分析" if len(analyses) > 1 else f"针对需求：{analyses[0].description}"
@@ -126,6 +134,20 @@ def _build_plan(project_id: str, analyses: list) -> ValidationPlanRead:
 
 def select_plan_recommendations(recommendations: list) -> list:
     return [item for item in recommendations if item.review_status == "confirmed"]
+
+
+def resolve_recommendation_test_item(recommendation) -> object | None:
+    if recommendation.source_type == "test_item":
+        return get_item(recommendation.source_id)
+    if recommendation.source_type != "test_package":
+        return None
+    package = get_package(recommendation.source_id)
+    if package is None:
+        return None
+    package_item = next((item for item in package.items if item.title == recommendation.title), None)
+    if package_item is None:
+        return None
+    return get_item(package_item.test_item_id)
 
 
 def get_plan(plan_id: str) -> ValidationPlanRead | None:

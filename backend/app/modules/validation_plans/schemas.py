@@ -9,7 +9,12 @@ class ValidationPlanItem(BaseModel):
     group: str
     objective: str
     method: str
+    tools: list[str] = []
+    steps: list[str] = []
+    connection_media: str = ""
     record_template: str
+    compliance_bug_info: str = ""
+    source_section_text: str = ""
     evidence: str
 
 
