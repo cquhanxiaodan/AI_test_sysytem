@@ -1,4 +1,4 @@
-import { Alert, Button, Card, Descriptions, Form, Input, List, Modal, Select, Space, Spin, Table, Tag, Typography, Upload, message } from "antd";
+import { Alert, Button, Card, Checkbox, Descriptions, Form, Input, List, Modal, Select, Space, Spin, Table, Tag, Typography, Upload, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { UploadOutlined } from "@ant-design/icons";
 import { useEffect, useState } from "react";
@@ -35,6 +35,7 @@ export default function RequirementAnalysisPage() {
   const [analysis, setAnalysis] = useState<RequirementAnalysis | null>(null);
   const [analyses, setAnalyses] = useState<RequirementAnalysis[]>([]);
   const [selectedAnalysisIds, setSelectedAnalysisIds] = useState<Key[]>([]);
+  const [selectedRecommendationIds, setSelectedRecommendationIds] = useState<Key[]>([]);
   const [batchResult, setBatchResult] = useState<RequirementBatchUploadResult | null>(null);
   const [batchFile, setBatchFile] = useState<File | null>(null);
   const [template, setTemplate] = useState<RequirementTemplate | null>(null);
@@ -90,6 +91,10 @@ export default function RequirementAnalysisPage() {
       })
       .catch(() => undefined);
   }
+
+  useEffect(() => {
+    setSelectedRecommendationIds((selectedIds) => selectedIds.filter((id) => analysis?.recommendations.some((item) => item.id === id) ?? false));
+  }, [analysis]);
 
   useEffect(() => {
     if (!isLocalAnalyzing && !isAiAnalyzing) return;
@@ -253,12 +258,55 @@ export default function RequirementAnalysisPage() {
     }
   }
 
+  function invertSelectedAnalyses() {
+    const selectedIds = new Set(selectedAnalysisIds.map(String));
+    setSelectedAnalysisIds(analyses.filter((analysisItem) => !selectedIds.has(analysisItem.id)).map((analysisItem) => analysisItem.id));
+  }
+
   async function includeLocalRecommendation(item: RequirementRecommendation) {
     if (!analysis) return;
     const updated = await includeRequirementRecommendationInLocal(analysis.id, item.id);
     setAnalysis(updated);
     refreshAnalyses(updated);
     message.success("已纳入本地测试条目资产草稿，当前审核状态保持不变");
+  }
+
+  function invertSelectedRecommendations() {
+    if (!analysis) return;
+    const selectedIds = new Set(selectedRecommendationIds.map(String));
+    setSelectedRecommendationIds(analysis.recommendations.filter((item) => !selectedIds.has(item.id)).map((item) => item.id));
+  }
+
+  async function runRecommendationBatchAction(action: "include-local" | "confirm" | "exclude" | "delete") {
+    if (!analysis || selectedRecommendationIds.length === 0) return;
+    const selectedIds = new Set(selectedRecommendationIds.map(String));
+    let updated = analysis;
+    try {
+      for (const recommendation of analysis.recommendations) {
+        if (!selectedIds.has(recommendation.id)) continue;
+        if (action === "include-local") {
+          if (!canIncludeLocal(recommendation)) continue;
+          updated = await includeRequirementRecommendationInLocal(updated.id, recommendation.id);
+        } else if (action === "delete") {
+          updated = await deleteRequirementRecommendation(updated.id, recommendation.id);
+        } else {
+          updated = await updateRequirementRecommendation(updated.id, recommendation.id, { review_status: action === "confirm" ? "confirmed" : "excluded" });
+        }
+      }
+      setAnalysis(updated);
+      setSelectedRecommendationIds([]);
+      refreshAnalyses(updated);
+      const messageByAction = {
+        "include-local": "已批量纳入本地测试条目资产草稿",
+        confirm: "已批量确认推荐项",
+        exclude: "已批量排除推荐项",
+        delete: "已批量删除推荐项",
+      };
+      message.success(messageByAction[action]);
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "批量操作推荐项失败");
+      refreshAnalyses(updated);
+    }
   }
 
   function canIncludeLocal(item: RequirementRecommendation) {
@@ -393,6 +441,7 @@ export default function RequirementAnalysisPage() {
             message="测试方案只会使用已确认的推荐测试条目，待审核和已排除条目不会进入测试方案。"
           />
           <Space className="section-card">
+            <Button disabled={analyses.length === 0} onClick={invertSelectedAnalyses}>反选</Button>
             <Button
               danger
               disabled={selectedAnalysisIds.length === 0}
@@ -441,12 +490,31 @@ export default function RequirementAnalysisPage() {
           <List
             className="section-card"
             header={
-              <Space wrap>
-                <span>推荐测试条目</span>
-                <Button size="small" onClick={openCreateRecommendation}>新增推荐项</Button>
-                <Button size="small" type="primary" onClick={runAiAnalysis} loading={isAiAnalyzing} disabled={!analysis || isLocalAnalyzing}>
-                  AI 补充分析
-                </Button>
+              <Space direction="vertical" className="full-width">
+                <Space wrap>
+                  <span>推荐测试条目</span>
+                  <Button size="small" onClick={openCreateRecommendation}>新增推荐项</Button>
+                  <Button size="small" type="primary" onClick={runAiAnalysis} loading={isAiAnalyzing} disabled={!analysis || isLocalAnalyzing}>
+                    AI 补充分析
+                  </Button>
+                </Space>
+                <Space wrap>
+                  <Button size="small" disabled={analysis.recommendations.length === 0} onClick={invertSelectedRecommendations}>反选</Button>
+                  <Button size="small" danger disabled={selectedRecommendationIds.length === 0} onClick={() => {
+                    Modal.confirm({
+                      title: "批量删除推荐项",
+                      content: `将删除选中的 ${selectedRecommendationIds.length} 个推荐项。`,
+                      okText: "删除",
+                      okButtonProps: { danger: true },
+                      cancelText: "取消",
+                      onOk: () => runRecommendationBatchAction("delete"),
+                    });
+                  }}>批量删除</Button>
+                  <Button size="small" disabled={selectedRecommendationIds.length === 0} onClick={() => runRecommendationBatchAction("include-local")}>批量纳入本地</Button>
+                  <Button size="small" type="primary" disabled={selectedRecommendationIds.length === 0} onClick={() => runRecommendationBatchAction("confirm")}>批量确认</Button>
+                  <Button size="small" danger disabled={selectedRecommendationIds.length === 0} onClick={() => runRecommendationBatchAction("exclude")}>批量排除</Button>
+                  <Typography.Text type="secondary">已选择 {selectedRecommendationIds.length} 条</Typography.Text>
+                </Space>
               </Space>
             }
             dataSource={analysis.recommendations}
@@ -460,6 +528,16 @@ export default function RequirementAnalysisPage() {
                   <Button key="delete" size="small" type="link" danger onClick={() => removeRecommendation(item)}>删除</Button>,
                 ].filter(Boolean)}
               >
+              <Checkbox
+                checked={selectedRecommendationIds.map(String).includes(item.id)}
+                onChange={(event) => {
+                  setSelectedRecommendationIds((selectedIds) => {
+                    if (event.target.checked) return [...new Set([...selectedIds.map(String), item.id])];
+                    return selectedIds.filter((selectedId) => selectedId !== item.id);
+                  });
+                }}
+                style={{ marginRight: 12 }}
+              />
               <List.Item.Meta
                 title={
                   <>

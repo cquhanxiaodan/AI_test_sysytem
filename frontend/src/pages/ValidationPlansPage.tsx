@@ -179,6 +179,11 @@ export default function ValidationPlansPage() {
     });
   }
 
+  function invertSelectedPlans() {
+    const selectedIds = new Set(selectedPlanIds.map(String));
+    setSelectedPlanIds(plans.filter((plan) => !selectedIds.has(plan.id)).map((plan) => plan.id));
+  }
+
   const columns: ColumnsType<ValidationPlan> = [
     { title: "方案标题", dataIndex: "title" },
     { title: "关联需求", dataIndex: "requirement_analysis_ids", render: (ids: string[]) => `${ids.length} 条` },
@@ -225,9 +230,11 @@ export default function ValidationPlansPage() {
           <Button type="primary" loading={creating} disabled={!currentProject} onClick={handleCreate}>
             为当前项目生成验证方案
           </Button>
+          <Button disabled={plans.length === 0} onClick={invertSelectedPlans}>反选</Button>
           <Button danger disabled={selectedPlanIds.length === 0} onClick={confirmBulkDelete}>
             批量删除{selectedPlanIds.length > 0 ? `（${selectedPlanIds.length}）` : ""}
           </Button>
+          <Typography.Text type="secondary">已选择 {selectedPlanIds.length} 条</Typography.Text>
         </Space>
         {plans.length === 0 && !loading ? (
           <Empty description="暂无验证方案。完成需求分析后点击上方按钮批量生成。" />

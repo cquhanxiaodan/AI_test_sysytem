@@ -109,6 +109,11 @@ export default function TestAssetsPage() {
     await loadItems();
   }
 
+  function invertSelectedItems() {
+    const selectedIds = new Set(selectedItemIds.map(String));
+    setSelectedItemIds(items.filter((item) => !selectedIds.has(item.id)).map((item) => item.id));
+  }
+
   function openEditItem(item: TestItemAsset) {
     setEditingItem(item);
     editForm.setFieldsValue(item);
@@ -155,6 +160,11 @@ export default function TestAssetsPage() {
       message.warning(`有 ${result.skipped.length} 个测试归口包未发布`);
     }
     await loadItems();
+  }
+
+  function invertSelectedPackages() {
+    const selectedIds = new Set(selectedPackageIds.map(String));
+    setSelectedPackageIds(packages.filter((packageAsset) => !selectedIds.has(packageAsset.id)).map((packageAsset) => packageAsset.id));
   }
 
   function openEditPackage(packageAsset: TestPackageAsset) {
@@ -207,6 +217,11 @@ export default function TestAssetsPage() {
       message.warning(`有 ${result.skipped.length} 个风险知识项未发布`);
     }
     await loadItems();
+  }
+
+  function invertSelectedRisks() {
+    const selectedIds = new Set(selectedRiskIds.map(String));
+    setSelectedRiskIds(risks.filter((risk) => !selectedIds.has(risk.id)).map((risk) => risk.id));
   }
 
   function openEditRisk(risk: RiskItem) {
@@ -352,8 +367,10 @@ export default function TestAssetsPage() {
                     测试条目来自全局共享资产库，所有项目空间均可查看全部条目。资料池中的验证方案、测试规范、测试报告在管理员发布后会自动拆分；测试条目发布后再进入归口包。
                   </Typography.Paragraph>
                   <Space>
+                    <Button disabled={items.length === 0} onClick={invertSelectedItems}>反选</Button>
                     <Button type="primary" disabled={selectedItemIds.length === 0} onClick={publishSelectedItems}>发布选中测试条目</Button>
                     <Button danger disabled={selectedItemIds.length === 0} onClick={deleteSelectedItems}>删除选中测试条目</Button>
+                    <Typography.Text type="secondary">已选择 {selectedItemIds.length} 条</Typography.Text>
                   </Space>
                   <Table
                     rowKey="id"
@@ -375,7 +392,11 @@ export default function TestAssetsPage() {
                   <Typography.Paragraph type="secondary">
                     归口包由已发布测试条目自动归并生成，优先按模块匹配，没有模块时按系统配置中的子系统匹配。
                   </Typography.Paragraph>
-                  <Button type="primary" disabled={selectedPackageIds.length === 0} onClick={publishSelectedPackages}>发布选中测试归口包</Button>
+                  <Space>
+                    <Button disabled={packages.length === 0} onClick={invertSelectedPackages}>反选</Button>
+                    <Button type="primary" disabled={selectedPackageIds.length === 0} onClick={publishSelectedPackages}>发布选中测试归口包</Button>
+                    <Typography.Text type="secondary">已选择 {selectedPackageIds.length} 条</Typography.Text>
+                  </Space>
                   <Table
                     rowKey="id"
                     loading={loading}
@@ -395,7 +416,11 @@ export default function TestAssetsPage() {
                   <Typography.Paragraph type="secondary">
                     风险知识源来自统一资料池中已发布的 Jira 导出和 DFMEA 文件，所有项目空间均可查看全部风险知识项。
                   </Typography.Paragraph>
-                  <Button type="primary" disabled={selectedRiskIds.length === 0} onClick={publishSelectedRisks}>发布选中风险知识项</Button>
+                  <Space>
+                    <Button disabled={risks.length === 0} onClick={invertSelectedRisks}>反选</Button>
+                    <Button type="primary" disabled={selectedRiskIds.length === 0} onClick={publishSelectedRisks}>发布选中风险知识项</Button>
+                    <Typography.Text type="secondary">已选择 {selectedRiskIds.length} 条</Typography.Text>
+                  </Space>
                   <Table
                     rowKey="id"
                     loading={loading}

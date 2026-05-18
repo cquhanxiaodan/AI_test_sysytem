@@ -142,6 +142,11 @@ export default function DocumentPoolPage() {
     await loadDocuments();
   }
 
+  function invertSelectedDocuments() {
+    const selectedIds = new Set(selectedDocumentIds.map(String));
+    setSelectedDocumentIds(documents.filter((document) => !selectedIds.has(document.id)).map((document) => document.id));
+  }
+
   const columns: ColumnsType<DocumentItem> = [
     { title: "文件名", dataIndex: "filename" },
     { title: "所属项目", dataIndex: "project_id", render: (projectId) => projects.find((project) => project.id === projectId)?.name ?? projectId },
@@ -195,7 +200,9 @@ export default function DocumentPoolPage() {
         </Upload>
         <Button disabled={!currentProject || batchFiles.length === 0} onClick={submitBatchUpload}>提交批量上传</Button>
         <Button disabled={!currentProject || !importDirectory} onClick={scanImportDirectory}>扫描新增资料</Button>
+        <Button disabled={documents.length === 0} onClick={invertSelectedDocuments}>反选</Button>
         <Button danger disabled={selectedDocumentIds.length === 0} onClick={deleteSelectedDocuments}>删除选中资料</Button>
+        <Typography.Text type="secondary">已选择 {selectedDocumentIds.length} 条</Typography.Text>
       </Space>
       <Card className="section-card">
         <Typography.Paragraph type="secondary">
