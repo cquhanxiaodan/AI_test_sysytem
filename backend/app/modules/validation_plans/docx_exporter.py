@@ -60,3 +60,41 @@ def render_validation_plan_docx(plan: ValidationPlanRead, template_path: Path, o
         }
     )
     template.save(output_path)
+    rewrite_test_item_section(output_path, plan)
+
+
+def rewrite_test_item_section(output_path: Path, plan: ValidationPlanRead) -> None:
+    document = Document(output_path)
+    start_index = next((index for index, paragraph in enumerate(document.paragraphs) if paragraph.text.strip() == "3. 测试项目"), None)
+    if start_index is None:
+        return
+    remove_paragraphs_after(document, start_index)
+    for item in plan.items:
+        document.add_heading(f"3.{item.sequence} {item.title}", level=3)
+        add_test_item_subsection(document, item.sequence, 1, "测试目的/测试标准", item.objective)
+        add_test_item_subsection(document, item.sequence, 2, "测试方法/原理", item.method)
+        add_test_item_subsection(document, item.sequence, 3, "测试工具", numbered_lines(item.tools, "待确认"))
+        add_test_item_subsection(document, item.sequence, 4, "测试步骤", numbered_lines(item.steps, "按模板执行并记录过程数据。"))
+        add_test_item_subsection(document, item.sequence, 5, "测试连接图或照片", item.connection_media or "待补充")
+        add_test_item_subsection(document, item.sequence, 6, "测试记录", item.record_template)
+        add_test_item_subsection(document, item.sequence, 7, "需求符合性和BUG信息", item.compliance_bug_info)
+        if item.source_section_text:
+            add_test_item_subsection(document, item.sequence, 8, "原始测试项目章节", item.source_section_text)
+    document.save(output_path)
+
+
+def remove_paragraphs_after(document: Document, start_index: int) -> None:
+    for paragraph in list(document.paragraphs[start_index + 1 :]):
+        paragraph._element.getparent().remove(paragraph._element)
+
+
+def add_test_item_subsection(document: Document, sequence: int, subsection: int, title: str, body: str) -> None:
+    document.add_heading(f"3.{sequence}.{subsection} {title}", level=4)
+    document.add_paragraph(body or "待补充")
+
+
+def numbered_lines(values: list[str], fallback: str) -> str:
+    usable_values = [value for value in values if value]
+    if not usable_values:
+        return fallback
+    return "\n".join(f"{index}. {value}" for index, value in enumerate(usable_values, start=1))

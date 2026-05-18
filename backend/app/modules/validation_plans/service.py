@@ -109,7 +109,7 @@ def _build_plan(project_id: str, analyses: list) -> ValidationPlanRead:
                     steps=source_item.steps if source_item is not None else [],
                     connection_media=(source_item.connection_media if source_item is not None else "") or "待补充",
                     record_template=(source_item.record_template if source_item is not None else "") or recommendation.record_template or "记录样本编号、测试条件、实际结果、判定结论和关联 BUG。",
-                    compliance_bug_info=(source_item.compliance_bug_info if source_item is not None else "") or "记录需求符合性结论和关联 BUG 信息。",
+                    compliance_bug_info=plan_compliance_bug_info(recommendation.title, source_item),
                     source_section_text=source_item.source_section_text if source_item is not None else "",
                     evidence=(source_item.evidence if source_item is not None else "") or recommendation.evidence,
                 )
@@ -134,6 +134,13 @@ def _build_plan(project_id: str, analyses: list) -> ValidationPlanRead:
 
 def select_plan_recommendations(recommendations: list) -> list:
     return [item for item in recommendations if item.review_status == "confirmed"]
+
+
+def plan_compliance_bug_info(title: str, source_item: object | None) -> str:
+    source_value = (source_item.compliance_bug_info if source_item is not None else "") or ""
+    if source_value and source_value != "记录需求符合性结论和关联 BUG 信息。":
+        return source_value
+    return f"记录{title}的需求符合性判定；若发现与验收标准不一致的问题，登记 BUG 编号、问题现象、影响范围、责任归属和回归验证结论。"
 
 
 def resolve_recommendation_test_item(recommendation) -> object | None:

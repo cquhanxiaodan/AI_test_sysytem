@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from fastapi.testclient import TestClient
+from docx import Document
 
 from app.main import app
 from app.modules.documents.repository import DOCUMENTS
@@ -189,6 +190,7 @@ def test_validation_plan_items_carry_requirement_fields() -> None:
     assert item["objective"]
     assert item["method"]
     assert item["record_template"]
+    assert item["title"] in item["compliance_bug_info"]
 
 
 def test_validation_plan_items_reuse_full_test_item_content() -> None:
@@ -241,6 +243,23 @@ RFID安装；
     assert item["connection_media"] == "整机安装照片见附件 A。"
     assert item["compliance_bug_info"] == "通过时记录需求符合，失败时登记 BUG 编号。"
     assert "测试目的/测试标准" in item["source_section_text"]
+
+
+def test_validation_plan_export_uses_structured_test_item_headings() -> None:
+    headers = auth_headers()
+    seed_assets(headers)
+    analysis_id = create_analysis(headers)
+    update_recommendation_status(headers, analysis_id, 0, "confirmed")
+    created = client.post("/api/validation-plans", headers=headers, json={"project_id": "project-g99-rfid"})
+    plan_id = created.json()["id"]
+
+    exported = client.post(f"/api/validation-plans/{plan_id}/export", headers=headers)
+
+    assert exported.status_code == 200
+    document = Document(exported.json()["storage_path"])
+    heading_texts = [paragraph.text for paragraph in document.paragraphs if paragraph.style.name.startswith("Heading")]
+    assert any(text.startswith("3.1 ") for text in heading_texts)
+    assert any(text.startswith("3.1.7 需求符合性和BUG信息") for text in heading_texts)
 
 
 def test_validation_plan_status_can_be_updated_and_export_marks_exported() -> None:

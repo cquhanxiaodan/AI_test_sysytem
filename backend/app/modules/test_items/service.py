@@ -162,7 +162,7 @@ def split_items_with_ai(project_id: str, document_id: str, filename: str, text: 
                     module=str(raw_item.get("module") or infer_module_from_title(str(raw_item.get("title") or ""))),
                     related_subsystems=[str(value) for value in raw_item.get("related_subsystems", []) if isinstance(value, str)],
                     test_level=str(raw_item.get("test_level") or "待确认层级"),
-                    test_type=normalize_test_type(str(raw_item.get("test_type") or ""), str(raw_item.get("title") or "")),
+                    test_type=normalize_test_type(str(raw_item.get("test_type") or "")),
                     risk_tags=[str(value) for value in raw_item.get("risk_tags", []) if isinstance(value, str)],
                     objective=str(raw_item.get("objective") or f"验证{raw_item.get('title')}满足需求。"),
                     method=str(raw_item.get("method") or "待测试工程师确认方法和标准。"),
@@ -203,7 +203,7 @@ def update_item(item_id: str, payload: TestItemUpdate) -> TestItemAsset | None:
     if "module" in updates and updates["module"] == "RFID":
         updates["primary_subsystem"] = normalize_subsystem("电子子系统")
     if "test_type" in updates:
-        updates["test_type"] = normalize_test_type(updates["test_type"], updates.get("title", item.title))
+        updates["test_type"] = normalize_test_type(updates["test_type"])
     updated = item.model_copy(update={**updates, "status": "draft" if item.status != "draft" else item.status})
     _save_item(updated)
     return updated
@@ -264,7 +264,7 @@ def create_item_from_fields(
         module=module,
         related_subsystems=[],
         test_level="待确认层级",
-        test_type=infer_test_type(title),
+        test_type=infer_test_type(),
         risk_tags=["AI补充", "需求分析"],
         objective=objective,
         method=method,
@@ -455,7 +455,7 @@ def build_test_item(project_id: str, document_id: str, filename: str, title: str
         module=infer_module_from_title(title),
         related_subsystems=["整机系统"] if "安规" in title or "EMC" in title else [],
         test_level="系统级" if "安规" in title or "EMC" in title else "子系统级",
-        test_type=infer_test_type(title),
+        test_type=infer_test_type(),
         risk_tags=["供应商变更", "兼容性"],
         objective=objective,
         method=method,
@@ -498,34 +498,16 @@ def prefer_local_extracted_fields(item: TestItemAsset, filename: str, section: E
     return item.model_copy(update=updates)
 
 
-def infer_test_type(title: str) -> str:
-    return normalize_test_type("", title)
+def infer_test_type() -> str:
+    return normalize_test_type("")
 
 
-def normalize_test_type(value: str, title: str = "") -> str:
+def normalize_test_type(value: str) -> str:
     config = get_config()
     candidates = config.test_types
     if value in candidates:
         return value
-    matched_value = next((candidate for candidate in candidates if value and (value in candidate or candidate in value)), None)
-    if matched_value:
-        return matched_value
-    keyword_map = [
-        ("读取", ["读取", "功能测试"]),
-        ("写入", ["写入", "功能测试"]),
-        ("初始化", ["初始化", "功能测试"]),
-        ("装配", ["装配兼容性"]),
-        ("安规", ["安规 EMC"]),
-        ("EMC", ["安规 EMC"]),
-    ]
-    for keyword, preferred_values in keyword_map:
-        if keyword in title:
-            for preferred in preferred_values:
-                matched = next((value for value in candidates if preferred in value), None)
-                if matched:
-                    return matched
-            break
-    return candidates[0] if candidates else "功能测试"
+    return next((candidate for candidate in candidates if "功能" in candidate), candidates[0] if candidates else "功能测试")
 
 
 def infer_module_from_title(title: str) -> str:
