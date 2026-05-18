@@ -132,7 +132,7 @@ export default function DocumentPoolPage() {
       message.success(`已删除 ${result.deleted_ids.length} 个资料`);
     }
     if (result.skipped.length > 0) {
-      message.warning(`有 ${result.skipped.length} 个资料未删除，已发布资料会保留`);
+      message.warning(`有 ${result.skipped.length} 个资料未删除，请检查权限或资料状态`);
     }
     await loadDocuments();
   }
@@ -207,7 +207,6 @@ export default function DocumentPoolPage() {
           rowSelection={{
             selectedRowKeys: selectedDocumentIds,
             onChange: setSelectedDocumentIds,
-            getCheckboxProps: (document) => ({ disabled: document.status === "published" }),
           }}
         />
       </Card>

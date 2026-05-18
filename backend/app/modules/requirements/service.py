@@ -19,7 +19,7 @@ from app.modules.requirements.schemas import (
 )
 from app.modules.risks.service import list_risks
 from app.modules.test_items.service import create_item_from_fields
-from app.modules.test_packages.service import list_packages
+from app.modules.test_packages.service import generate_rfid_supplier_change_package, is_rfid_related_item, list_packages
 
 ANALYSES: dict[str, RequirementAnalysisRead] = {}
 ALLOWED_RECOMMENDATION_STATUSES = {"pending", "confirmed", "excluded"}
@@ -288,6 +288,8 @@ def include_recommendation_in_local_items(analysis_id: str, recommendation_id: s
             record_template=recommendation.record_template or "记录样本编号、测试条件、实际结果、判定结论和关联 BUG。",
             evidence=f"需求分析纳入本地：{recommendation.evidence}",
         )
+        if is_rfid_related_item(local_item):
+            generate_rfid_supplier_change_package(analysis.project_id)
         analysis.recommendations[index] = recommendation.model_copy(
             update={
                 "source_type": "test_item",

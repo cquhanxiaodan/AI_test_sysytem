@@ -168,9 +168,6 @@ def bulk_delete_documents(
         if get_project_for_user(document.project_id, current_user) is None:
             skipped.append({"document_id": document_id, "reason": "无项目访问权限"})
             continue
-        if document.status == "published":
-            skipped.append({"document_id": document_id, "reason": "已发布资料不能直接删除"})
-            continue
         if delete_document(document.id):
             deleted_ids.append(document.id)
     return DocumentBulkDeleteResponse(deleted_ids=deleted_ids, skipped=skipped)

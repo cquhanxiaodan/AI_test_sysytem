@@ -9,7 +9,7 @@ from app.modules.requirements.service import ANALYSES
 from app.modules.risks.service import RISKS
 from app.modules.test_items.service import list_test_items
 from app.modules.test_items.service import TEST_ITEMS
-from app.modules.test_packages.service import TEST_PACKAGES
+from app.modules.test_packages.service import TEST_PACKAGES, list_packages
 
 
 client = TestClient(app)
@@ -410,6 +410,8 @@ def test_include_ai_recommendation_in_local_test_items(monkeypatch) -> None:
     local_item = next(item for item in list_test_items("project-g99-rfid") if item.id == updated["source_id"])
     assert local_item.title == "新增 RFID 异常断电恢复测试"
     assert local_item.status == "published"
+    package = next(package for package in list_packages("project-g99-rfid") if package.name == "RFID 供应商变更验证包")
+    assert any(item.test_item_id == local_item.id for item in package.items)
 
 
 def test_include_ai_recommendation_reuses_existing_local_test_item(monkeypatch) -> None:

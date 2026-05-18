@@ -162,7 +162,7 @@ def test_bulk_delete_removes_unpublished_documents() -> None:
     assert remaining.json() == []
 
 
-def test_bulk_delete_skips_published_documents() -> None:
+def test_bulk_delete_allows_published_documents_for_flow_retest() -> None:
     headers = auth_headers()
     upload = client.post(
         "/api/documents/upload",
@@ -185,9 +185,9 @@ def test_bulk_delete_skips_published_documents() -> None:
     )
 
     assert response.status_code == 200
-    assert response.json()["deleted_ids"] == []
-    assert response.json()["skipped"] == [{"document_id": document_id, "reason": "已发布资料不能直接删除"}]
-    assert document_id in DOCUMENTS
+    assert response.json()["deleted_ids"] == [document_id]
+    assert response.json()["skipped"] == []
+    assert document_id not in DOCUMENTS
 
 
 def test_document_label_update_moves_to_review() -> None:
