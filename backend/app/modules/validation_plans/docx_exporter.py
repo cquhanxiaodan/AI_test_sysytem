@@ -3,6 +3,8 @@ from pathlib import Path
 from docx import Document
 from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT
 from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
 from docx.shared import Pt
 
 from app.modules.validation_plans.schemas import ValidationPlanRead
@@ -54,6 +56,7 @@ def render_validation_plan_docx(plan: ValidationPlanRead, template_path: Path, o
     rewrite_overview_section(output_path, plan)
     rewrite_summary_tables(output_path, plan)
     rewrite_test_item_section(output_path, plan)
+    prepare_fields_for_refresh(output_path)
 
 
 def rewrite_overview_section(output_path: Path, plan: ValidationPlanRead) -> None:
@@ -93,6 +96,19 @@ def rewrite_test_item_section(output_path: Path, plan: ValidationPlanRead) -> No
         add_compliance_table(document, item.title, item.compliance_bug_info)
         document.add_paragraph("")
         add_bug_table(document)
+    document.save(output_path)
+
+
+def prepare_fields_for_refresh(output_path: Path) -> None:
+    document = Document(output_path)
+    settings = document.settings.element
+    update_fields = settings.find(qn("w:updateFields"))
+    if update_fields is None:
+        update_fields = OxmlElement("w:updateFields")
+        settings.append(update_fields)
+    update_fields.set(qn("w:val"), "true")
+    for field_char in document.element.body.iter(qn("w:fldChar")):
+        field_char.set(qn("w:dirty"), "true")
     document.save(output_path)
 
 

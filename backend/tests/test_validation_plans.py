@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 from docx import Document
 from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT
 from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
+from docx.oxml.ns import qn
 from docx.shared import Pt
 from docx.table import Table
 from docx.text.paragraph import Paragraph
@@ -335,6 +336,24 @@ def test_validation_plan_export_preserves_reference_template_styles() -> None:
     assert ("Normal", "文档履历") in paragraphs
     assert any(style == "Heading 1" and text == "概述" for style, text in paragraphs)
     assert any(style == "Heading 1" and text == "测试项目" for style, text in paragraphs)
+
+
+def test_validation_plan_export_marks_toc_fields_for_refresh() -> None:
+    headers = auth_headers()
+    seed_assets(headers)
+    analysis_id = create_analysis(headers)
+    update_recommendation_status(headers, analysis_id, 0, "confirmed")
+    created = client.post("/api/validation-plans", headers=headers, json={"project_id": "project-g99-rfid"})
+    plan_id = created.json()["id"]
+
+    exported = client.post(f"/api/validation-plans/{plan_id}/export", headers=headers)
+
+    assert exported.status_code == 200
+    document = Document(exported.json()["storage_path"])
+    update_fields = document.settings.element.find(qn("w:updateFields"))
+    assert update_fields is not None
+    assert update_fields.get(qn("w:val")) == "true"
+    assert any(field_char.get(qn("w:dirty")) == "true" for field_char in document.element.body.iter(qn("w:fldChar")))
 
 
 def test_validation_plan_export_uses_source_blocks_for_document_items() -> None:
