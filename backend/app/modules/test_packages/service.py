@@ -7,7 +7,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.core.config import get_settings
 from app.core.database import Base, session_scope
 from app.modules.admin.service import get_config
-from app.modules.test_items.service import list_test_items
+from app.modules.test_items.service import list_test_items, normalize_test_item_title
 from app.modules.test_packages.schemas import TestPackageAsset, TestPackageItem, TestPackageUpdate
 
 TEST_PACKAGES: dict[str, TestPackageAsset] = {}
@@ -50,15 +50,17 @@ def list_packages(project_id: str | None = None) -> list[TestPackageAsset]:
 
 def generate_rfid_supplier_change_package(project_id: str) -> TestPackageAsset:
     items = [item for item in list_test_items(project_id) if is_rfid_related_item(item)]
-    package_items = [
-        TestPackageItem(
-            test_item_id=item.id,
-            title=item.title,
-            relation_type=relation_type_for_title(item.title),
-            trigger_condition="涉及供应商、结构、标签材料或整机 EMC 风险变化时触发" if "安规" in item.title else None,
-        )
-        for item in items
-    ]
+    package_items = deduplicate_package_items(
+        [
+            TestPackageItem(
+                test_item_id=item.id,
+                title=item.title,
+                relation_type=relation_type_for_title(item.title),
+                trigger_condition="涉及供应商、结构、标签材料或整机 EMC 风险变化时触发" if "安规" in item.title else None,
+            )
+            for item in items
+        ]
+    )
     package = TestPackageAsset(
         id=f"pkg-{uuid4()}",
         project_id=project_id,
@@ -153,15 +155,28 @@ def create_package_for_item(item, package_name: str, package_item: TestPackageIt
 def upsert_package_item(items: list[TestPackageItem], package_item: TestPackageItem) -> list[TestPackageItem]:
     updated: list[TestPackageItem] = []
     replaced = False
+    package_item_title = normalize_test_item_title(package_item.title)
     for item in items:
-        if item.test_item_id == package_item.test_item_id:
+        if item.test_item_id == package_item.test_item_id or normalize_test_item_title(item.title) == package_item_title:
             updated.append(package_item)
             replaced = True
         else:
             updated.append(item)
     if not replaced:
         updated.append(package_item)
-    return updated
+    return deduplicate_package_items(updated)
+
+
+def deduplicate_package_items(items: list[TestPackageItem]) -> list[TestPackageItem]:
+    deduplicated: list[TestPackageItem] = []
+    seen_titles: set[str] = set()
+    for item in items:
+        title_key = normalize_test_item_title(item.title)
+        if title_key in seen_titles:
+            continue
+        seen_titles.add(title_key)
+        deduplicated.append(item)
+    return deduplicated
 
 
 def find_package_by_name(name: str) -> TestPackageAsset | None:

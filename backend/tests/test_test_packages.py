@@ -79,6 +79,43 @@ def test_generate_rfid_supplier_change_package_reuses_existing_package() -> None
     assert len(packages) == 1
 
 
+def test_generate_rfid_supplier_change_package_deduplicates_normalized_titles() -> None:
+    headers = auth_headers()
+    create_item_from_fields(
+        project_id="project-g99-rfid",
+        title="RFID 在机读取测试",
+        test_object="RFID",
+        subsystem="RFID",
+        objective="验证 RFID 读取。",
+        method="执行 RFID 读取。",
+        record_template="记录读取结果。",
+        evidence="seed",
+        source_type="document",
+        status="published",
+    )
+    create_item_from_fields(
+        project_id="project-g99-rfid",
+        title="RFID在机读取测试",
+        test_object="RFID",
+        subsystem="RFID",
+        objective="验证 RFID 读取。",
+        method="执行 RFID 读取。",
+        record_template="记录读取结果。",
+        evidence="seed",
+        source_type="document",
+        status="published",
+    )
+
+    response = client.post(
+        "/api/test-packages/generate-rfid-supplier-change?project_id=project-g99-rfid",
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    titles = [item["title"] for item in response.json()["items"]]
+    assert len([title for title in titles if title.replace(" ", "") == "RFID在机读取测试"]) == 1
+
+
 def test_publish_test_package() -> None:
     headers = auth_headers()
     seed_rfid_items(headers)
