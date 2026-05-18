@@ -263,6 +263,26 @@ def test_validation_plan_export_uses_structured_test_item_headings() -> None:
     assert all(not text.startswith("3.1.8") for text in heading_texts)
 
 
+def test_validation_plan_export_renders_structured_tables() -> None:
+    headers = auth_headers()
+    seed_assets(headers)
+    analysis_id = create_analysis(headers)
+    update_recommendation_status(headers, analysis_id, 0, "confirmed")
+    created = client.post("/api/validation-plans", headers=headers, json={"project_id": "project-g99-rfid"})
+    plan_id = created.json()["id"]
+
+    exported = client.post(f"/api/validation-plans/{plan_id}/export", headers=headers)
+
+    assert exported.status_code == 200
+    document = Document(exported.json()["storage_path"])
+    table_headers = [tuple(cell.text for cell in table.rows[0].cells) for table in document.tables]
+    table_rows = [tuple(cell.text for cell in row.cells) for table in document.tables for row in table.rows]
+    assert ("序号", "名称", "设备型号", "制造商", "设备编码", "校准有效期") in table_headers
+    assert any("记录项目" in row and "判定标准" in row for row in table_rows)
+    assert ("序号", "需求编号/DFMEA编号/风险管理编号", "需求描述", "测试结论", "备注") in table_headers
+    assert ("序号", "问题描述", "涉及需求编号", "BUG编号（JIRA系统）", "RPN", "Bug解决状态") in table_headers
+
+
 def test_validation_plan_status_can_be_updated_and_export_marks_exported() -> None:
     headers = auth_headers()
     seed_assets(headers)

@@ -2,6 +2,7 @@ from pathlib import Path
 
 from docxtpl import DocxTemplate
 from docx import Document
+from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
 
 from app.modules.validation_plans.schemas import ValidationPlanRead
 
@@ -73,11 +74,15 @@ def rewrite_test_item_section(output_path: Path, plan: ValidationPlanRead) -> No
         document.add_heading(f"3.{item.sequence} {item.title}", level=3)
         add_test_item_subsection(document, item.sequence, 1, "测试目的/测试标准", item.objective)
         add_test_item_subsection(document, item.sequence, 2, "测试方法/原理", item.method)
-        add_test_item_subsection(document, item.sequence, 3, "测试工具", numbered_lines(item.tools, "待确认"))
+        add_test_item_heading(document, item.sequence, 3, "测试工具")
+        add_tools_table(document, item.tools)
         add_test_item_subsection(document, item.sequence, 4, "测试步骤", numbered_lines(item.steps, "按模板执行并记录过程数据。"))
         add_test_item_subsection(document, item.sequence, 5, "测试连接图或照片", item.connection_media or "待补充")
-        add_test_item_subsection(document, item.sequence, 6, "测试记录", item.record_template)
-        add_test_item_subsection(document, item.sequence, 7, "需求符合性和BUG信息", item.compliance_bug_info)
+        add_test_item_heading(document, item.sequence, 6, "测试记录")
+        add_record_table(document, item.title, item.record_template)
+        add_test_item_heading(document, item.sequence, 7, "需求符合性和BUG信息")
+        add_compliance_table(document, item.title, item.compliance_bug_info)
+        add_bug_table(document)
     document.save(output_path)
 
 
@@ -87,8 +92,59 @@ def remove_paragraphs_after(document: Document, start_index: int) -> None:
 
 
 def add_test_item_subsection(document: Document, sequence: int, subsection: int, title: str, body: str) -> None:
-    document.add_heading(f"3.{sequence}.{subsection} {title}", level=4)
+    add_test_item_heading(document, sequence, subsection, title)
     document.add_paragraph(body or "待补充")
+
+
+def add_test_item_heading(document: Document, sequence: int, subsection: int, title: str) -> None:
+    document.add_heading(f"3.{sequence}.{subsection} {title}", level=4)
+
+
+def add_tools_table(document: Document, tools: list[str]) -> None:
+    rows = [tool for tool in tools if tool] or ["/"]
+    table = document.add_table(rows=len(rows) + 1, cols=6)
+    table.style = "Table Grid"
+    set_table_row(table.rows[0].cells, ["序号", "名称", "设备型号", "制造商", "设备编码", "校准有效期"])
+    for index, tool in enumerate(rows, start=1):
+        set_table_row(table.rows[index].cells, [str(index), tool, "/", "/", "/", "/"])
+
+
+def add_record_table(document: Document, title: str, record_template: str) -> None:
+    records = split_record_lines(record_template) or [title]
+    table = document.add_table(rows=len(records) + 4, cols=7)
+    table.style = "Table Grid"
+    set_table_row(table.rows[0].cells, ["环境温度", "", "", "相对湿度", "", "", ""])
+    set_table_row(table.rows[1].cells, ["测试时间", "", "", "测试地点", "", "", ""])
+    set_table_row(table.rows[2].cells, ["测试人员", "", "", "测试结论", "", "", ""])
+    set_table_row(table.rows[3].cells, ["序号", "记录项目", "记录数据（单位）", "处理结果（单位）", "判定标准", "结果", "备注"])
+    for index, record in enumerate(records, start=1):
+        set_table_row(table.rows[index + 3].cells, [str(index), record, "", "", record_template or "按测试标准判定。", "□P □F", ""])
+
+
+def add_compliance_table(document: Document, title: str, compliance_bug_info: str) -> None:
+    table = document.add_table(rows=2, cols=5)
+    table.style = "Table Grid"
+    set_table_row(table.rows[0].cells, ["序号", "需求编号/DFMEA编号/风险管理编号", "需求描述", "测试结论", "备注"])
+    set_table_row(table.rows[1].cells, ["1", "", title, compliance_bug_info or "待记录需求符合性结论。", ""])
+
+
+def add_bug_table(document: Document) -> None:
+    table = document.add_table(rows=2, cols=6)
+    table.style = "Table Grid"
+    set_table_row(table.rows[0].cells, ["序号", "问题描述", "涉及需求编号", "BUG编号（JIRA系统）", "RPN", "Bug解决状态"])
+    set_table_row(table.rows[1].cells, ["1", "", "", "", "", ""])
+
+
+def set_table_row(cells, values: list[str]) -> None:
+    for cell, value in zip(cells, values):
+        cell.text = value
+        for paragraph in cell.paragraphs:
+            paragraph.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+
+
+def split_record_lines(record_template: str) -> list[str]:
+    normalized = record_template.replace("；", "\n").replace(";", "\n")
+    return [line.strip(" \t\r\n。.") for line in normalized.splitlines() if line.strip(" \t\r\n。.")]
 
 
 def numbered_lines(values: list[str], fallback: str) -> str:
