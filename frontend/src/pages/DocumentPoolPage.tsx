@@ -1,4 +1,4 @@
-import { Button, Card, Form, Input, message, Modal, Space, Table, Tag, Typography, Upload } from "antd";
+import { Button, Card, Form, Input, message, Modal, Select, Space, Table, Tag, Typography, Upload } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import type { UploadFile } from "antd/es/upload/interface";
 import { useEffect, useState } from "react";
@@ -7,6 +7,7 @@ import {
   DocumentDirectoryScanResult,
   DocumentItem,
   fetchDocumentImportConfig,
+  fetchSystemConfig,
   extractDocumentLabels,
   fetchDocuments,
   parseDocument,
@@ -16,6 +17,7 @@ import {
   updateDocumentLabels,
   uploadDocument,
   uploadDocuments,
+  SystemConfig,
 } from "../api/client";
 import { useProjects } from "../context/ProjectContext";
 
@@ -29,6 +31,7 @@ export default function DocumentPoolPage() {
   const [lastScan, setLastScan] = useState<DocumentDirectoryScanResult | null>(null);
   const [batchFiles, setBatchFiles] = useState<UploadFile[]>([]);
   const [selectedDocumentIds, setSelectedDocumentIds] = useState<React.Key[]>([]);
+  const [systemConfig, setSystemConfig] = useState<SystemConfig | null>(null);
   const [form] = Form.useForm<Record<string, string>>();
 
   async function loadDocuments() {
@@ -45,6 +48,7 @@ export default function DocumentPoolPage() {
     fetchDocumentImportConfig()
       .then((config) => setImportDirectory(config.import_directory))
       .catch(() => setImportDirectory(""));
+    fetchSystemConfig().then(setSystemConfig).catch(() => setSystemConfig(null));
   }, [currentProject?.id]);
 
   async function handleUpload(file: File) {
@@ -234,16 +238,23 @@ export default function DocumentPoolPage() {
             <Input placeholder="例如 DNBSEQ-G99" />
           </Form.Item>
           <Form.Item label="子系统" name="subsystem">
-            <Input placeholder="例如 RFID" />
+            <Select showSearch allowClear placeholder="请选择子系统" options={toOptions(systemConfig?.subsystem_catalog || [])} />
+          </Form.Item>
+          <Form.Item label="模块" name="module">
+            <Select showSearch allowClear placeholder="请选择或输入模块" options={toOptions(["RFID"])} />
           </Form.Item>
           <Form.Item label="文档类型" name="document_type">
-            <Input placeholder="例如 验证方案" />
+            <Select showSearch allowClear placeholder="请选择文档类型" options={toOptions(systemConfig?.document_types || [])} />
           </Form.Item>
           <Form.Item label="变更类型" name="change_type">
-            <Input placeholder="例如 供应商变更" />
+            <Select showSearch allowClear placeholder="请选择变更类型" options={toOptions(systemConfig?.change_types || [])} />
           </Form.Item>
         </Form>
       </Modal>
     </section>
   );
+}
+
+function toOptions(values: string[]) {
+  return values.map((value) => ({ label: value, value }));
 }
