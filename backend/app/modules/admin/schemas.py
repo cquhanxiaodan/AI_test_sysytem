@@ -8,6 +8,7 @@ class SystemConfig(BaseModel):
     test_levels: list[str]
     test_types: list[str]
     change_types: list[str]
+    template_section_aliases: dict[str, list[str]] = Field(default_factory=dict)
     ai_external_reference_enabled: bool
     validation_template_version: str
 
@@ -32,6 +33,7 @@ class SystemConfigUpdate(BaseModel):
     test_levels: list[str] | None = None
     test_types: list[str] | None = None
     change_types: list[str] | None = None
+    template_section_aliases: dict[str, list[str]] | None = None
 
 
 class AuditEvent(BaseModel):

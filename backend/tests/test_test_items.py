@@ -14,6 +14,7 @@ def setup_function() -> None:
     from app.modules.admin import service as admin_service
     from app.modules.ai.service import RUNTIME_AI_CONFIG
 
+    admin_service.CONFIG = admin_service.DEFAULT_CONFIG.model_copy(deep=True)
     admin_service.get_settings().repository_backend = "memory"
     admin_service.get_settings().system_config_path = f"/tmp/monkeycode-test-system-config-{uuid4()}.json"
     RUNTIME_AI_CONFIG.clear()
@@ -140,6 +141,68 @@ DNBSEQ-G99
     assert install_item["compliance_bug_info"] == "通过时记录需求符合，失败时登记 BUG 编号。"
     assert "测试目的/测试标准" in install_item["source_section_text"]
     assert install_item["evidence"] == "DNBSEQ-G99 RFID验证方案.txt"
+
+
+def test_split_document_uses_configured_template_section_aliases() -> None:
+    headers = auth_headers()
+    config_response = client.put(
+        "/api/admin/config",
+        headers=headers,
+        json={
+            "template_section_aliases": {
+                "objective": ["验证目的", "验收准则"],
+                "method": ["验证方法"],
+                "tools": ["仪器设备"],
+                "steps": ["执行步骤"],
+                "connection_media": ["连接示意"],
+                "record_template": ["结果记录"],
+                "compliance_bug_info": ["缺陷闭环"],
+            }
+        },
+    )
+    assert config_response.status_code == 200
+    content = """
+测试项目列表
+测试项目
+RFID非标模板测试
+RFID非标模板测试
+验证目的
+确认非标准模板字段能映射到测试目的。
+验证方法
+按非标准模板执行验证。
+仪器设备
+DNBSEQ-G99
+执行步骤
+连接RFID模块；
+执行初始化；
+连接示意
+连接图见附件 B。
+结果记录
+记录初始化响应。
+缺陷闭环
+失败时登记 BUG 并回归。
+""".strip()
+    upload = client.post(
+        "/api/documents/upload",
+        headers=headers,
+        data={"project_id": "project-g99-rfid"},
+        files={"file": ("非标模板验证方案.txt", content.encode("utf-8"), "text/plain")},
+    )
+    document_id = upload.json()["document"]["id"]
+    client.post(f"/api/parsing/documents/{document_id}/parse", headers=headers)
+
+    response = client.post(f"/api/test-items/split/{document_id}", headers=headers)
+
+    assert response.status_code == 200
+    item = response.json()["items"][0]
+    assert item["title"] == "RFID非标模板测试"
+    assert item["objective"] == "确认非标准模板字段能映射到测试目的。"
+    assert item["method"] == "按非标准模板执行验证。"
+    assert item["tools"] == ["DNBSEQ-G99"]
+    assert item["steps"] == ["连接RFID模块", "执行初始化"]
+    assert item["connection_media"] == "连接图见附件 B。"
+    assert item["record_template"] == "记录初始化响应。"
+    assert item["compliance_bug_info"] == "失败时登记 BUG 并回归。"
 
 
 def test_confirm_test_item_publishes_asset() -> None:

@@ -2,7 +2,7 @@ from fastapi.testclient import TestClient
 from uuid import uuid4
 
 from app.main import app
-from app.modules.admin.service import AUDIT_EVENTS, CONFIG
+from app.modules.admin.service import AUDIT_EVENTS, DEFAULT_CONFIG
 
 
 client = TestClient(app)
@@ -12,7 +12,7 @@ def setup_function() -> None:
     AUDIT_EVENTS.clear()
     from app.modules.admin import service
 
-    service.CONFIG = CONFIG
+    service.CONFIG = DEFAULT_CONFIG.model_copy(deep=True)
     settings = service.get_settings()
     settings.repository_backend = "memory"
     settings.system_config_path = f"/tmp/monkeycode-test-system-config-{uuid4()}.json"
@@ -48,6 +48,18 @@ def test_admin_can_update_system_dictionary_options() -> None:
     assert response.json()["test_types"] == ["功能测试", "可靠性测试"]
 
 
+def test_admin_can_update_template_section_aliases() -> None:
+    response = client.put(
+        "/api/admin/config",
+        headers=auth_headers(),
+        json={"template_section_aliases": {"objective": ["验证目的", "验收准则", "验证目的"], "steps": ["执行步骤"]}},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["template_section_aliases"]["objective"] == ["验证目的", "验收准则"]
+    assert response.json()["template_section_aliases"]["steps"] == ["执行步骤"]
+
+
 def test_tester_cannot_update_system_config() -> None:
     response = client.put(
         "/api/admin/config",
@@ -69,7 +81,7 @@ def test_memory_system_config_persists_to_file(tmp_path) -> None:
     )
 
     assert response.status_code == 200
-    service.CONFIG = CONFIG
+    service.CONFIG = DEFAULT_CONFIG.model_copy(deep=True)
     persisted = client.get("/api/admin/config", headers=auth_headers())
     assert persisted.json()["test_levels"] == ["部件级", "整机级"]
 
@@ -85,6 +97,7 @@ def test_old_system_config_file_format_still_loads(tmp_path) -> None:
 
     assert response.status_code == 200
     assert response.json()["test_types"] == ["旧格式类型"]
+    assert "验证目的" in response.json()["template_section_aliases"]["objective"]
 
 
 def test_saving_system_config_preserves_other_settings(tmp_path) -> None:

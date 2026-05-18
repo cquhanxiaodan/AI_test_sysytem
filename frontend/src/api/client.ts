@@ -272,11 +272,12 @@ export type SystemConfig = {
   test_levels: string[];
   test_types: string[];
   change_types: string[];
+  template_section_aliases: Record<string, string[]>;
   ai_external_reference_enabled: boolean;
   validation_template_version: string;
 };
 
-export type SystemConfigUpdate = Partial<Pick<SystemConfig, "subsystem_catalog" | "document_types" | "test_levels" | "test_types" | "change_types">>;
+export type SystemConfigUpdate = Partial<Pick<SystemConfig, "subsystem_catalog" | "document_types" | "test_levels" | "test_types" | "change_types" | "template_section_aliases">>;
 
 export type AiConfig = {
   provider: string;

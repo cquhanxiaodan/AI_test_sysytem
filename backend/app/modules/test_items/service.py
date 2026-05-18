@@ -7,6 +7,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.config import get_settings
 from app.core.database import Base, session_scope
+from app.modules.admin.service import get_config
 from app.modules.ai.service import run_json_task
 from app.modules.documents.repository import get_document
 from app.modules.parsing.service import list_chunks
@@ -14,7 +15,7 @@ from app.modules.test_items.schemas import SplitResult, TestItemAsset, TestItemU
 
 TEST_ITEMS: dict[str, TestItemAsset] = {}
 
-SECTION_LABELS = {
+DEFAULT_SECTION_LABELS = {
     "objective": ["测试目的/测试标准", "测试目的", "测试标准"],
     "method": ["测试方法/原理", "测试方法", "测试原理"],
     "tools": ["测试工具"],
@@ -23,21 +24,6 @@ SECTION_LABELS = {
     "record_template": ["测试记录", "记录模板"],
     "compliance_bug_info": ["需求符合性和BUG信息", "需求符合性结果", "测试发现的BUG信息表"],
 }
-BOUNDARY_LABELS = [
-    "测试目的/测试标准",
-    "测试目的",
-    "测试标准",
-    "测试方法/原理",
-    "测试方法",
-    "测试原理",
-    "测试工具",
-    "测试步骤",
-    "测试连接图或照片",
-    "测试记录",
-    "需求符合性和BUG信息",
-    "需求符合性结果",
-    "测试发现的BUG信息表",
-]
 
 
 @dataclass
@@ -300,7 +286,9 @@ def infer_test_titles(text: str) -> list[str]:
 
 def extract_test_sections(text: str) -> list[ExtractedTestSection]:
     lines = normalize_lines(text)
-    titles = infer_project_table_titles(lines)
+    section_labels = get_section_labels()
+    boundary_labels = get_boundary_labels(section_labels)
+    titles = infer_project_table_titles(lines, section_labels, boundary_labels)
     sections: list[ExtractedTestSection] = []
     for index, title in enumerate(titles):
         start = find_detail_line_index(lines, title)
@@ -311,13 +299,13 @@ def extract_test_sections(text: str) -> list[ExtractedTestSection]:
         sections.append(
             ExtractedTestSection(
                 title=title,
-                objective=extract_labeled_text(section_lines, SECTION_LABELS["objective"]),
-                method=extract_labeled_text(section_lines, SECTION_LABELS["method"]),
-                tools=split_list_text(extract_labeled_text(section_lines, SECTION_LABELS["tools"])),
-                steps=split_list_text(extract_labeled_text(section_lines, SECTION_LABELS["steps"])),
-                connection_media=extract_labeled_text(section_lines, SECTION_LABELS["connection_media"]),
-                record_template=extract_labeled_text(section_lines, SECTION_LABELS["record_template"]),
-                compliance_bug_info=extract_labeled_text(section_lines, SECTION_LABELS["compliance_bug_info"]),
+                objective=extract_labeled_text(section_lines, section_labels["objective"], boundary_labels),
+                method=extract_labeled_text(section_lines, section_labels["method"], boundary_labels),
+                tools=split_list_text(extract_labeled_text(section_lines, section_labels["tools"], boundary_labels)),
+                steps=split_list_text(extract_labeled_text(section_lines, section_labels["steps"], boundary_labels)),
+                connection_media=extract_labeled_text(section_lines, section_labels["connection_media"], boundary_labels),
+                record_template=extract_labeled_text(section_lines, section_labels["record_template"], boundary_labels),
+                compliance_bug_info=extract_labeled_text(section_lines, section_labels["compliance_bug_info"], boundary_labels),
                 source_section_text="\n".join([title, *section_lines]).strip(),
             )
         )
@@ -329,8 +317,21 @@ def normalize_lines(text: str) -> list[str]:
     return [line.strip() for line in normalized.splitlines() if line.strip()]
 
 
-def infer_project_table_titles(lines: list[str]) -> list[str]:
-    detail_titles = infer_detail_titles(lines)
+def get_section_labels() -> dict[str, list[str]]:
+    configured = get_config().template_section_aliases
+    labels = {key: list(values) for key, values in DEFAULT_SECTION_LABELS.items()}
+    for key, values in configured.items():
+        if key in labels and values:
+            labels[key] = values
+    return labels
+
+
+def get_boundary_labels(section_labels: dict[str, list[str]]) -> set[str]:
+    return {label for labels in section_labels.values() for label in labels}
+
+
+def infer_project_table_titles(lines: list[str], section_labels: dict[str, list[str]], boundary_labels: set[str]) -> list[str]:
+    detail_titles = infer_detail_titles(lines, section_labels, boundary_labels)
     if detail_titles:
         return detail_titles
     titles: list[str] = []
@@ -342,7 +343,7 @@ def infer_project_table_titles(lines: list[str]) -> list[str]:
         if in_project_list and line in {"测试项目", "测试项目详情"}:
             continue
         if in_project_list:
-            if line in BOUNDARY_LABELS:
+            if line in boundary_labels:
                 break
             if line.endswith("测试") and line not in titles:
                 titles.append(line)
@@ -351,14 +352,14 @@ def infer_project_table_titles(lines: list[str]) -> list[str]:
                 break
     if titles:
         return titles
-    return [line for line in lines if line.endswith("测试") and line not in BOUNDARY_LABELS]
+    return [line for line in lines if line.endswith("测试") and line not in boundary_labels]
 
 
-def infer_detail_titles(lines: list[str]) -> list[str]:
+def infer_detail_titles(lines: list[str], section_labels: dict[str, list[str]], boundary_labels: set[str]) -> list[str]:
     titles: list[str] = []
-    objective_labels = set(SECTION_LABELS["objective"])
+    objective_labels = set(section_labels["objective"])
     for index, line in enumerate(lines):
-        if not line.endswith("测试") or line in BOUNDARY_LABELS:
+        if not line.endswith("测试") or line in boundary_labels:
             continue
         lookahead = lines[index + 1 : index + 5]
         if any(value in objective_labels for value in lookahead) and line not in titles:
@@ -387,13 +388,13 @@ def find_next_title_index(lines: list[str], titles: list[str], start: int) -> in
     return None
 
 
-def extract_labeled_text(lines: list[str], labels: list[str]) -> str:
+def extract_labeled_text(lines: list[str], labels: list[str], boundary_labels: set[str]) -> str:
     start = next((index for index, line in enumerate(lines) if line in labels), None)
     if start is None:
         return ""
     collected: list[str] = []
     for line in lines[start + 1 :]:
-        if line in BOUNDARY_LABELS:
+        if line in boundary_labels:
             break
         collected.append(line)
     return "\n".join(collected).strip()

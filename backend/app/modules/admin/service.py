@@ -37,9 +37,19 @@ CONFIG = SystemConfig(
     test_levels=["部件级", "子系统级", "系统级", "整机级", "回归验证"],
     test_types=["功能测试", "性能测试", "装配兼容性", "安规 EMC", "回归测试"],
     change_types=["供应商变更", "设计变更", "软件变更", "工艺变更"],
+    template_section_aliases={
+        "objective": ["测试目的/测试标准", "测试目的", "测试标准", "验证目的", "测试目标", "目的", "判定标准", "验收准则"],
+        "method": ["测试方法/原理", "测试方法", "测试原理", "验证方法", "测试过程", "方法原理"],
+        "tools": ["测试工具", "测试设备", "仪器设备", "工装夹具", "物料清单"],
+        "steps": ["测试步骤", "操作步骤", "执行步骤", "测试流程", "验证步骤"],
+        "connection_media": ["测试连接图或照片", "连接图", "测试照片", "测试连接图", "示意图", "图片记录"],
+        "record_template": ["测试记录", "记录模板", "记录表", "结果记录", "测试结果"],
+        "compliance_bug_info": ["需求符合性和BUG信息", "需求符合性结果", "测试发现的BUG信息表", "符合性判定", "BUG信息", "缺陷记录"],
+    },
     ai_external_reference_enabled=False,
     validation_template_version="validation-plan-v1",
 )
+DEFAULT_CONFIG = CONFIG.model_copy(deep=True)
 
 
 def get_config() -> SystemConfig:
@@ -57,7 +67,11 @@ def get_config() -> SystemConfig:
 def update_config(payload: SystemConfigUpdate) -> SystemConfig:
     global CONFIG
     updates = payload.model_dump(exclude_unset=True)
-    cleaned_updates = {key: normalize_options(value) for key, value in updates.items() if value is not None}
+    cleaned_updates = {}
+    for key, value in updates.items():
+        if value is None:
+            continue
+        cleaned_updates[key] = normalize_template_section_aliases(value) if key == "template_section_aliases" else normalize_options(value)
     updated = get_config().model_copy(update=cleaned_updates)
     if _use_sqlalchemy():
         with session_scope() as session:
@@ -243,6 +257,10 @@ def normalize_options(values: list[str]) -> list[str]:
         if item and item not in normalized:
             normalized.append(item)
     return normalized
+
+
+def normalize_template_section_aliases(values: dict[str, list[str]]) -> dict[str, list[str]]:
+    return {key: normalize_options(items) for key, items in values.items() if isinstance(items, list)}
 
 
 def create_audit_event(actor_id: str, action: str, target_type: str, target_id: str, detail: str) -> AuditEvent:

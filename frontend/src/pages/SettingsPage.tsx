@@ -28,6 +28,16 @@ type DocumentImportForm = {
 
 type DictionaryForm = Required<SystemConfigUpdate>;
 
+const SECTION_ALIAS_LABELS: Record<string, string> = {
+  objective: "测试目的/测试标准",
+  method: "测试方法/原理",
+  tools: "测试工具",
+  steps: "测试步骤",
+  connection_media: "测试连接图或照片",
+  record_template: "测试记录",
+  compliance_bug_info: "需求符合性和 BUG 信息",
+};
+
 export default function SettingsPage() {
   const [form] = Form.useForm<AiSettingsForm>();
   const [documentImportForm] = Form.useForm<DocumentImportForm>();
@@ -76,6 +86,7 @@ export default function SettingsPage() {
           test_levels: config.test_levels,
           test_types: config.test_types,
           change_types: config.change_types,
+          template_section_aliases: config.template_section_aliases,
         });
       })
       .catch((error: Error) => message.error(`读取系统字典失败：${error.message}`));
@@ -121,8 +132,9 @@ export default function SettingsPage() {
           test_levels: config.test_levels,
           test_types: config.test_types,
           change_types: config.change_types,
+          template_section_aliases: config.template_section_aliases,
         });
-        message.success("系统字典已保存");
+        message.success("系统字典和模板适配已保存");
       })
       .catch((error: Error) => message.error(`保存失败：${error.message}`))
       .finally(() => setSavingDictionaries(false));
@@ -139,6 +151,7 @@ export default function SettingsPage() {
           test_levels: config.test_levels,
           test_types: config.test_types,
           change_types: config.change_types,
+          template_section_aliases: config.template_section_aliases,
         });
         message.success("已恢复上一版系统字典");
       })
@@ -247,6 +260,13 @@ export default function SettingsPage() {
           <Form.Item name="change_types" label="变更类型">
             <Select mode="tags" tokenSeparators={[",", "，"]} placeholder="输入后回车添加，例如 供应商变更" />
           </Form.Item>
+          <Form.Item
+            name="template_section_aliases"
+            label="测试条目模板适配"
+            extra="维护不同验证方案/测试规范中的段落别名。每个字段对应一个规范段落，输入后回车添加。"
+          >
+            <SectionAliasEditor />
+          </Form.Item>
           <Space>
             <Button type="primary" htmlType="submit" loading={savingDictionaries}>保存系统字典</Button>
             <Button onClick={restoreDictionaries} loading={savingDictionaries}>恢复上一版</Button>
@@ -255,5 +275,29 @@ export default function SettingsPage() {
         </Form>
       </Card>
     </section>
+  );
+}
+
+function SectionAliasEditor({ value = {}, onChange }: { value?: Record<string, string[]>; onChange?: (value: Record<string, string[]>) => void }) {
+  function updateAlias(key: string, aliases: string[]) {
+    onChange?.({ ...value, [key]: aliases });
+  }
+
+  return (
+    <Space direction="vertical" className="full-width" size="middle">
+      {Object.entries(SECTION_ALIAS_LABELS).map(([key, label]) => (
+        <div key={key}>
+          <Typography.Text strong>{label}</Typography.Text>
+          <Select
+            mode="tags"
+            className="full-width"
+            tokenSeparators={[",", "，"]}
+            value={value[key] || []}
+            placeholder={`输入${label}的模板别名`}
+            onChange={(aliases) => updateAlias(key, aliases)}
+          />
+        </div>
+      ))}
+    </Space>
   );
 }
