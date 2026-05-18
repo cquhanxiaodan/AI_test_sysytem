@@ -133,24 +133,25 @@ def run_json_task_detailed(task_type: str, system_prompt: str, user_prompt: str)
         "temperature": 0,
         "response_format": {"type": "json_object"},
     }
-    req = request.Request(
-        url,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-            "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
-        },
-        method="POST",
-    )
     try:
-        with request.urlopen(req, timeout=timeout_seconds) as response:
-            data = json.loads(response.read().decode("utf-8"))
+        data = request_chat_completion(url, api_key, payload, timeout_seconds)
     except TimeoutError:
         return AiTaskResult(output=None, status="failed", message="AI 调用超时，已使用本地规则推荐。")
     except error.HTTPError as exc:
-        return AiTaskResult(output=None, status="failed", message=f"AI 调用失败，HTTP 状态码 {exc.code}。")
+        if exc.code in {400, 422, 500, 502} and "response_format" in payload:
+            fallback_payload = {key: value for key, value in payload.items() if key != "response_format"}
+            try:
+                data = request_chat_completion(url, api_key, fallback_payload, timeout_seconds)
+            except TimeoutError:
+                return AiTaskResult(output=None, status="failed", message="AI 调用超时，已使用本地规则推荐。")
+            except error.HTTPError as fallback_exc:
+                return AiTaskResult(output=None, status="failed", message=f"AI 调用失败，HTTP 状态码 {fallback_exc.code}。")
+            except error.URLError as fallback_exc:
+                return AiTaskResult(output=None, status="failed", message=f"AI 调用失败：{fallback_exc.reason}")
+            except json.JSONDecodeError:
+                return AiTaskResult(output=None, status="failed", message="AI 服务返回内容无法解析。")
+        else:
+            return AiTaskResult(output=None, status="failed", message=f"AI 调用失败，HTTP 状态码 {exc.code}。")
     except error.URLError as exc:
         return AiTaskResult(output=None, status="failed", message=f"AI 调用失败：{exc.reason}")
     except json.JSONDecodeError:
@@ -167,6 +168,22 @@ def run_json_task_detailed(task_type: str, system_prompt: str, user_prompt: str)
         record_ai_run(task_type, output, model_name=model)
         return AiTaskResult(output=output, status="succeeded", message="AI 调用成功。")
     return AiTaskResult(output=None, status="failed", message="AI 输出结构不是对象。")
+
+
+def request_chat_completion(url: str, api_key: str, payload: dict[str, Any], timeout_seconds: int) -> dict[str, Any]:
+    req = request.Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
+        },
+        method="POST",
+    )
+    with request.urlopen(req, timeout=timeout_seconds) as response:
+        return json.loads(response.read().decode("utf-8"))
 
 
 def record_ai_run(task_type: str, output: dict[str, Any], model_name: str | None = None) -> AiRunRecord:

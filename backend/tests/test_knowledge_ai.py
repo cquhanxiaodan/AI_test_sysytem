@@ -1,8 +1,10 @@
 from fastapi.testclient import TestClient
+import json
+from urllib import error
 from uuid import uuid4
 
 from app.main import app
-from app.modules.ai.service import RUNTIME_AI_CONFIG
+from app.modules.ai.service import AI_RUNS, RUNTIME_AI_CONFIG, run_json_task_detailed
 from app.modules.parsing.schemas import DocumentChunk
 from app.modules.parsing.service import CHUNKS
 from app.modules.risks.service import RISKS
@@ -19,6 +21,7 @@ def setup_function() -> None:
     admin_service.get_settings().repository_backend = "memory"
     admin_service.get_settings().system_config_path = f"/tmp/monkeycode-test-system-config-{uuid4()}.json"
     RUNTIME_AI_CONFIG.clear()
+    AI_RUNS.clear()
     CHUNKS.clear()
     RISKS.clear()
     TEST_ITEMS.clear()
@@ -174,6 +177,46 @@ def test_non_admin_can_update_ai_config() -> None:
     assert response.status_code == 200
     assert response.json()["configured"] is True
     assert response.json()["model"] == "tester-model"
+
+
+def test_ai_json_task_retries_without_response_format_on_502(monkeypatch) -> None:
+    RUNTIME_AI_CONFIG.update(
+        {
+            "provider": "openai-compatible",
+            "base_url": "https://model.example.com/v1",
+            "api_key": "sk-test-secret",
+            "model": "test-model",
+            "timeout_seconds": 30,
+        }
+    )
+    calls: list[dict] = []
+
+    def fake_urlopen(req, timeout):
+        payload = json.loads(req.data.decode("utf-8"))
+        calls.append(payload)
+        if "response_format" in payload:
+            raise error.HTTPError(req.full_url, 502, "Bad Gateway", hdrs=None, fp=None)
+
+        class Response:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def read(self):
+                return json.dumps({"choices": [{"message": {"content": '{"answer":"ok"}'}}]}).encode("utf-8")
+
+        return Response()
+
+    monkeypatch.setattr("app.modules.ai.service.request.urlopen", fake_urlopen)
+
+    result = run_json_task_detailed("free_chat", "system", "user")
+
+    assert result.status == "succeeded"
+    assert result.output == {"answer": "ok"}
+    assert "response_format" in calls[0]
+    assert "response_format" not in calls[1]
 
 
 def test_free_chat_returns_local_knowledge_answer() -> None:
