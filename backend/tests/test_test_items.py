@@ -229,8 +229,8 @@ def test_split_document_uses_configured_test_types() -> None:
     assert response.status_code == 200
     items = {item["title"]: item for item in response.json()["items"]}
     assert items["RFID 在机读取测试"]["test_type"] == "配置功能测试"
-    assert items["RFID 在机装配测试"]["test_type"] == "配置功能测试"
-    assert items["安规 EMC 测试"]["test_type"] == "配置功能测试"
+    assert items["RFID 在机装配测试"]["test_type"] == "配置装配兼容性"
+    assert items["安规 EMC 测试"]["test_type"] == "配置安规 EMC"
 
 
 def test_confirm_test_item_publishes_asset() -> None:
@@ -430,6 +430,33 @@ def test_update_test_item_normalizes_unknown_test_type_to_configured_function_ty
 
     assert response.status_code == 200
     assert response.json()["test_type"] == "配置功能测试"
+
+
+def test_update_unknown_test_type_uses_title_keyword_to_choose_configured_type() -> None:
+    headers = auth_headers()
+    config_response = client.put(
+        "/api/admin/config",
+        headers=headers,
+        json={"test_types": ["配置功能测试", "配置可靠性测试"]},
+    )
+    assert config_response.status_code == 200
+    upload = client.post(
+        "/api/documents/upload",
+        headers=headers,
+        data={"project_id": "project-g99-rfid"},
+        files={"file": ("RFID验证方案.txt", b"RFID", "text/plain")},
+    )
+    split = client.post(f"/api/test-items/split/{upload.json()['document']['id']}", headers=headers)
+    item_id = split.json()["items"][0]["id"]
+
+    response = client.patch(
+        f"/api/test-items/{item_id}",
+        headers=headers,
+        json={"title": "RFID 断电恢复测试", "test_type": "手工未知类型"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["test_type"] == "配置可靠性测试"
 
 
 def test_update_test_item_accepts_configured_test_type_directly() -> None:

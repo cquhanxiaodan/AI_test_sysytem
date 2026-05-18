@@ -203,7 +203,7 @@ def update_item(item_id: str, payload: TestItemUpdate) -> TestItemAsset | None:
     if "module" in updates and updates["module"] == "RFID":
         updates["primary_subsystem"] = normalize_subsystem("电子子系统")
     if "test_type" in updates:
-        updates["test_type"] = normalize_test_type(updates["test_type"])
+        updates["test_type"] = normalize_test_type(updates["test_type"], updates.get("title", item.title))
     updated = item.model_copy(update={**updates, "status": "draft" if item.status != "draft" else item.status})
     _save_item(updated)
     return updated
@@ -264,7 +264,7 @@ def create_item_from_fields(
         module=module,
         related_subsystems=[],
         test_level="待确认层级",
-        test_type=infer_test_type(),
+        test_type=infer_test_type(title),
         risk_tags=["AI补充", "需求分析"],
         objective=objective,
         method=method,
@@ -455,7 +455,7 @@ def build_test_item(project_id: str, document_id: str, filename: str, title: str
         module=infer_module_from_title(title),
         related_subsystems=["整机系统"] if "安规" in title or "EMC" in title else [],
         test_level="系统级" if "安规" in title or "EMC" in title else "子系统级",
-        test_type=infer_test_type(),
+        test_type=infer_test_type(title),
         risk_tags=["供应商变更", "兼容性"],
         objective=objective,
         method=method,
@@ -498,15 +498,41 @@ def prefer_local_extracted_fields(item: TestItemAsset, filename: str, section: E
     return item.model_copy(update=updates)
 
 
-def infer_test_type() -> str:
-    return normalize_test_type("")
+def infer_test_type(title: str) -> str:
+    return normalize_test_type("", title)
 
 
-def normalize_test_type(value: str) -> str:
+def normalize_test_type(value: str, title: str = "") -> str:
     config = get_config()
     candidates = config.test_types
     if value in candidates:
         return value
+    keyword_preferences = [
+        ("读取", ["读取", "功能"]),
+        ("写入", ["写入", "功能"]),
+        ("初始化", ["初始化", "功能"]),
+        ("装配", ["装配", "兼容", "功能"]),
+        ("安装", ["装配", "兼容", "功能"]),
+        ("适配", ["装配", "兼容", "功能"]),
+        ("安规", ["安规", "EMC"]),
+        ("EMC", ["EMC", "安规"]),
+        ("环境", ["环境", "可靠"]),
+        ("应力", ["环境", "可靠"]),
+        ("断电", ["可靠", "功能"]),
+        ("恢复", ["可靠", "功能"]),
+        ("边界", ["边界", "可靠", "功能"]),
+        ("超时", ["边界", "可靠", "功能"]),
+        ("兼容", ["兼容", "功能"]),
+        ("一致性", ["一致", "功能"]),
+        ("追溯", ["追溯", "功能"]),
+    ]
+    for keyword, preferred_fragments in keyword_preferences:
+        if keyword not in title:
+            continue
+        for fragment in preferred_fragments:
+            matched = next((candidate for candidate in candidates if fragment in candidate), None)
+            if matched:
+                return matched
     return next((candidate for candidate in candidates if "功能" in candidate), candidates[0] if candidates else "功能测试")
 
 
