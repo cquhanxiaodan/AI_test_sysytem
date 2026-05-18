@@ -2,6 +2,9 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 from docx import Document
+from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT
+from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
+from docx.shared import Pt
 from docx.table import Table
 from docx.text.paragraph import Paragraph
 
@@ -254,15 +257,16 @@ def test_validation_plan_export_uses_structured_test_item_headings() -> None:
     update_recommendation_status(headers, analysis_id, 0, "confirmed")
     created = client.post("/api/validation-plans", headers=headers, json={"project_id": "project-g99-rfid"})
     plan_id = created.json()["id"]
+    expected_title = created.json()["items"][0]["title"]
 
     exported = client.post(f"/api/validation-plans/{plan_id}/export", headers=headers)
 
     assert exported.status_code == 200
     document = Document(exported.json()["storage_path"])
     heading_texts = [paragraph.text for paragraph in document.paragraphs if paragraph.style.name.startswith("Heading")]
-    assert any(text.startswith("3.1 ") for text in heading_texts)
-    assert any(text.startswith("3.1.7 需求符合性和BUG信息") for text in heading_texts)
-    assert all(not text.startswith("3.1.8") for text in heading_texts)
+    assert expected_title in heading_texts
+    assert "需求符合性和BUG信息" in heading_texts
+    assert all(not text.startswith("3.") for text in heading_texts)
 
 
 def test_validation_plan_export_renders_structured_tables() -> None:
@@ -307,6 +311,12 @@ def test_validation_plan_export_renders_top_level_tables() -> None:
     assert ("序号", "名称", "型号", "物料编码/版本", "制造商", "物料编号", "测试数量") in table_headers
     assert ("序号", "名称", "编号", "版本", "创建人", "时间") in table_headers
     assert ("序号", "测试项目", "对应需求编号/DFMEA编号/风险管理编号/测试目的", "样本量", "预估测试用时（h）", "备注") in table_headers
+    table = next(table for table in document.tables if tuple(cell.text for cell in table.rows[0].cells) == table_headers[-1])
+    for cell in table.rows[0].cells:
+        assert cell.vertical_alignment == WD_CELL_VERTICAL_ALIGNMENT.CENTER
+        assert cell.paragraphs[0].alignment == WD_PARAGRAPH_ALIGNMENT.CENTER
+        assert cell.paragraphs[0].paragraph_format.first_line_indent == Pt(0)
+        assert cell.paragraphs[0].paragraph_format.left_indent == Pt(0)
 
 
 def test_validation_plan_export_preserves_reference_template_styles() -> None:

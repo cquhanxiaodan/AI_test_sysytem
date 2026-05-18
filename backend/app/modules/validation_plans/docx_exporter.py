@@ -1,7 +1,9 @@
 from pathlib import Path
 
 from docx import Document
+from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT
 from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
+from docx.shared import Pt
 
 from app.modules.validation_plans.schemas import ValidationPlanRead
 
@@ -75,7 +77,7 @@ def rewrite_test_item_section(output_path: Path, plan: ValidationPlanRead) -> No
         return
     remove_paragraphs_after(document, start_index)
     for item in plan.items:
-        document.add_heading(f"3.{item.sequence} {item.title}", level=3)
+        document.add_heading(item.title, level=2)
         if has_source_blocks(item):
             append_source_blocks(document, item.source_blocks)
             continue
@@ -174,7 +176,7 @@ def add_test_item_subsection(document: Document, sequence: int, subsection: int,
 
 
 def add_test_item_heading(document: Document, sequence: int, subsection: int, title: str) -> None:
-    document.add_heading(f"3.{sequence}.{subsection} {title}", level=4)
+    document.add_heading(title, level=3)
 
 
 def add_tools_table(document: Document, tools: list[str]) -> None:
@@ -243,9 +245,15 @@ def add_source_table(document: Document, rows: list[list[str]]) -> None:
 
 def set_table_row(cells, values: list[str]) -> None:
     for cell, value in zip(cells, values):
+        cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
         cell.text = value
         for paragraph in cell.paragraphs:
             paragraph.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+            paragraph.paragraph_format.left_indent = Pt(0)
+            paragraph.paragraph_format.first_line_indent = Pt(0)
+            paragraph.paragraph_format.right_indent = Pt(0)
+            paragraph.paragraph_format.space_before = Pt(0)
+            paragraph.paragraph_format.space_after = Pt(0)
 
 
 def split_record_lines(record_template: str) -> list[str]:
