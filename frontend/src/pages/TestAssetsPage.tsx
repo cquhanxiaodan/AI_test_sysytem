@@ -114,11 +114,13 @@ export default function TestAssetsPage() {
 
   async function saveEditingItem() {
     if (!editingItem) return;
-    const values = editForm.getFieldsValue() as TestItemUpdate & { module?: string[] | string };
+    const values = await editForm.validateFields() as TestItemUpdate & { module?: string[] | string };
     const moduleValue = Array.isArray(values.module) ? values.module[0] || "" : values.module || "";
-    await updateTestItem(editingItem.id, { ...values, module: moduleValue });
+    const updatedItem = await updateTestItem(editingItem.id, { ...values, module: moduleValue });
+    setItems((currentItems) => currentItems.map((item) => (item.id === updatedItem.id ? updatedItem : item)));
     message.success("测试条目已更新");
     setEditingItem(null);
+    editForm.resetFields();
     await loadItems();
   }
 
@@ -306,6 +308,9 @@ export default function TestAssetsPage() {
   function renderItemDetails(item: TestItemAsset) {
     return (
       <Descriptions column={1} size="small">
+        <Descriptions.Item label="主子系统">{item.primary_subsystem || "未填写"}</Descriptions.Item>
+        <Descriptions.Item label="关联子系统">{item.related_subsystems.length > 0 ? item.related_subsystems.join("、") : "未填写"}</Descriptions.Item>
+        <Descriptions.Item label="模块">{item.module || "未填写"}</Descriptions.Item>
         <Descriptions.Item label="测试目的">{item.objective}</Descriptions.Item>
         <Descriptions.Item label="测试方法/标准">{item.method}</Descriptions.Item>
         <Descriptions.Item label="测试工具">{item.tools.length > 0 ? item.tools.join("、") : "未提取"}</Descriptions.Item>
