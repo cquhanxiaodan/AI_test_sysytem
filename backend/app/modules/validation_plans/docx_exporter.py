@@ -54,11 +54,30 @@ def render_validation_plan_docx(plan: ValidationPlanRead, template_path: Path, o
     ensure_default_template(template_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     Document(template_path).save(output_path)
+    sync_document_title(output_path, plan.title)
     rewrite_overview_section(output_path, plan)
     rewrite_summary_tables(output_path, plan)
     rewrite_test_item_section(output_path, plan)
     rebuild_table_of_contents(output_path, plan)
     prepare_fields_for_refresh(output_path)
+
+
+def sync_document_title(output_path: Path, title: str) -> None:
+    document = Document(output_path)
+    document.core_properties.title = title
+    for section in document.sections:
+        sync_header_title(section.header, title)
+    document.save(output_path)
+
+
+def sync_header_title(header, title: str) -> None:
+    for table in header.tables:
+        if table.rows and table.rows[0].cells:
+            for cell in table.rows[0].cells:
+                cell.text = title
+                for paragraph in cell.paragraphs:
+                    paragraph.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+                    reset_paragraph_indent_xml(paragraph)
 
 
 def rewrite_overview_section(output_path: Path, plan: ValidationPlanRead) -> None:

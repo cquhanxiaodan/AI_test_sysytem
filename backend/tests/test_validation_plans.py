@@ -116,6 +116,12 @@ def test_create_plan_from_project_batches_all_analyses(monkeypatch) -> None:
     export_record = exported.json()
     assert export_record["filename"].endswith(".docx")
     assert Path(export_record["storage_path"]).exists()
+    document = Document(export_record["storage_path"])
+    expected_title = export_record["filename"].removesuffix(".docx")
+    header_cells = [cell.text for section in document.sections for table in section.header.tables for cell in table.rows[0].cells]
+    assert document.core_properties.title == expected_title
+    assert expected_title in header_cells
+    assert all("DNBSEQ-G99 ECR4.1康奈特RFID验证方案" not in cell for cell in header_cells)
 
     downloaded = client.get(export_record["download_url"], headers=headers)
     assert downloaded.status_code == 200
