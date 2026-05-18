@@ -315,6 +315,8 @@ def normalize_package_module(value: str, subsystem: str = "") -> str:
 
 
 def infer_package_module(test_object: str) -> str:
+    if test_object == "RFID":
+        return "RFID"
     config = get_config()
     all_modules = [module for modules in config.subsystem_modules.values() for module in modules]
     return test_object if test_object in all_modules else ""
@@ -324,6 +326,8 @@ def infer_package_subsystem(test_object: str) -> str:
     config = get_config()
     if test_object in config.subsystem_catalog:
         return test_object
+    if test_object == "RFID":
+        return normalize_package_subsystem("电子子系统")
     for subsystem, modules in config.subsystem_modules.items():
         if test_object in modules:
             return subsystem

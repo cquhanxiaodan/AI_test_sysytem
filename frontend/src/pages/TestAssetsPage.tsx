@@ -273,7 +273,6 @@ export default function TestAssetsPage() {
   const packageColumns: ColumnsType<TestPackageAsset> = [
     { title: "归口包", dataIndex: "name" },
     { title: "所属项目", dataIndex: "project_id", render: (projectId) => projects.find((project) => project.id === projectId)?.name ?? projectId },
-    { title: "对象", dataIndex: "test_object" },
     { title: "子系统", dataIndex: "subsystem", render: (value) => value || "-" },
     { title: "模块", dataIndex: "module", render: (value) => value || "-" },
     { title: "变更类型", dataIndex: "change_type" },
