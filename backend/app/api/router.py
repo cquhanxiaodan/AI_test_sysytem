@@ -4,6 +4,7 @@ from app.modules.auth.router import router as auth_router
 from app.modules.ai.router import router as ai_router
 from app.modules.admin.router import router as admin_router
 from app.modules.documents.router import router as documents_router
+from app.modules.feedback.router import router as feedback_router
 from app.modules.free_chat.router import router as free_chat_router
 from app.modules.health.router import router as health_router
 from app.modules.knowledge.router import router as knowledge_router
@@ -21,6 +22,7 @@ api_router.include_router(health_router, tags=["health"])
 api_router.include_router(auth_router)
 api_router.include_router(projects_router)
 api_router.include_router(documents_router)
+api_router.include_router(feedback_router)
 api_router.include_router(free_chat_router)
 api_router.include_router(parsing_router)
 api_router.include_router(test_items_router)

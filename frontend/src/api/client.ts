@@ -314,6 +314,24 @@ export type FreeChatMessage = {
   content: string;
 };
 
+export type FeedbackItem = {
+  id: string;
+  submitter_id: string;
+  submitter_name: string;
+  submit_date: string;
+  feedback_type: "bug" | "requirement";
+  content: string;
+  status: "pending" | "processing" | "resolved" | "closed";
+  admin_reply: string;
+  replied_by: string | null;
+  replied_at: string | null;
+  updated_at: string;
+};
+
+export type FeedbackCreate = Pick<FeedbackItem, "feedback_type" | "content">;
+
+export type FeedbackAdminUpdate = Partial<Pick<FeedbackItem, "status" | "admin_reply">>;
+
 export function getToken() {
   return window.localStorage.getItem(TOKEN_KEY);
 }
@@ -415,6 +433,24 @@ export async function fetchProjectWorkspaceStats(projectId: string) {
 export async function fetchDocuments(projectId?: string) {
   const query = projectId ? `?project_id=${encodeURIComponent(projectId)}` : "";
   return request<DocumentItem[]>(`/api/documents${query}`);
+}
+
+export async function fetchFeedbackItems() {
+  return request<FeedbackItem[]>("/api/feedback");
+}
+
+export async function createFeedback(payload: FeedbackCreate) {
+  return request<FeedbackItem>("/api/feedback", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateFeedback(feedbackId: string, payload: FeedbackAdminUpdate) {
+  return request<FeedbackItem>(`/api/feedback/${feedbackId}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
 }
 
 export async function uploadDocument(projectId: string, file: File) {

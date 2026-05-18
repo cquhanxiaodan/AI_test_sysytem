@@ -6,6 +6,7 @@ import { useAuth } from "./context/AuthContext";
 
 const DashboardPage = lazy(() => import("./pages/DashboardPage"));
 const DocumentPoolPage = lazy(() => import("./pages/DocumentPoolPage"));
+const FeedbackPage = lazy(() => import("./pages/FeedbackPage"));
 const FreeChatPage = lazy(() => import("./pages/FreeChatPage"));
 const LoginPage = lazy(() => import("./pages/LoginPage"));
 const ProjectSpacesPage = lazy(() => import("./pages/ProjectSpacesPage"));
@@ -37,6 +38,7 @@ export default function App() {
           <Route path="test-assets" element={<TestAssetsPage />} />
           <Route path="validation-plans" element={<ValidationPlansPage />} />
           <Route path="free-chat" element={<FreeChatPage />} />
+          <Route path="feedback" element={<FeedbackPage />} />
           <Route path="settings" element={<SettingsPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />

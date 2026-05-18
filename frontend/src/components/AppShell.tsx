@@ -3,6 +3,7 @@ import {
   AuditOutlined,
   ClusterOutlined,
   CommentOutlined,
+  CustomerServiceOutlined,
   ExperimentOutlined,
   FileSearchOutlined,
   FolderOpenOutlined,
@@ -24,6 +25,7 @@ const menuItems = [
   { key: "/requirements", icon: <FileSearchOutlined />, label: "需求分析" },
   { key: "/validation-plans", icon: <ProfileOutlined />, label: "验证方案" },
   { key: "/free-chat", icon: <CommentOutlined />, label: "自由应用" },
+  { key: "/feedback", icon: <CustomerServiceOutlined />, label: "Bug与需求反馈" },
   { key: "/settings", icon: <SettingOutlined />, label: "系统设置" },
 ];
 
