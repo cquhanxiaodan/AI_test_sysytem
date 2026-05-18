@@ -2,10 +2,10 @@ from pathlib import Path
 
 from docx import Document
 from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT
-from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
+from docx.enum.text import WD_PARAGRAPH_ALIGNMENT, WD_TAB_ALIGNMENT, WD_TAB_LEADER
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
-from docx.shared import Pt
+from docx.shared import Inches, Pt
 from lxml import etree
 
 from app.modules.validation_plans.schemas import ValidationPlanRead
@@ -121,8 +121,9 @@ def rebuild_table_of_contents(output_path: Path, plan: ValidationPlanRead) -> No
         document.save(output_path)
         return
     anchor = toc_element
-    for text in reversed(build_toc_lines(plan)):
-        paragraph = document.add_paragraph(text)
+    for title, page_number, is_title in reversed(build_toc_lines(plan)):
+        paragraph = document.add_paragraph()
+        apply_toc_paragraph(paragraph, title, page_number, is_title)
         anchor.addnext(paragraph._p)
     toc_element.getparent().remove(toc_element)
     document.save(output_path)
@@ -136,24 +137,32 @@ def find_toc_element(document: Document):
     return None
 
 
-def build_toc_lines(plan: ValidationPlanRead) -> list[str]:
+def build_toc_lines(plan: ValidationPlanRead) -> list[tuple[str, int | None, bool]]:
     lines = [
-        "目 录",
-        format_toc_line("1 概述", 3),
-        format_toc_line("1.1 验证的背景、目的和范围", 3),
-        format_toc_line("1.2 DUT描述", 3),
-        format_toc_line("1.3 参考文档", 3),
-        format_toc_line("2 测试项目列表", 4),
-        format_toc_line("3 测试项目", 5),
+        ("目 录", None, True),
+        ("1 概述", 3, False),
+        ("1.1 验证的背景、目的和范围", 3, False),
+        ("1.2 DUT描述", 3, False),
+        ("1.3 参考文档", 3, False),
+        ("2 测试项目列表", 4, False),
+        ("3 测试项目", 5, False),
     ]
     for item in plan.items:
-        lines.append(format_toc_line(f"3.{item.sequence} {item.title}", 5))
+        lines.append((f"3.{item.sequence} {item.title}", 5, False))
     return lines
 
 
-def format_toc_line(title: str, page_number: int) -> str:
-    dot_count = max(6, 36 - len(title))
-    return f"{title}{'.' * dot_count}{page_number}"
+def apply_toc_paragraph(paragraph, title: str, page_number: int | None, is_title: bool) -> None:
+    if is_title:
+        paragraph.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+        run = paragraph.add_run(title)
+        run.bold = True
+        run.font.size = Pt(16)
+        return
+    paragraph.paragraph_format.tab_stops.add_tab_stop(Inches(6.3), WD_TAB_ALIGNMENT.RIGHT, WD_TAB_LEADER.DOTS)
+    paragraph.add_run(title)
+    paragraph.add_run("\t")
+    paragraph.add_run(str(page_number or ""))
 
 
 def replace_heading_body_with_paragraphs(document: Document, heading_texts: list[str], values: list[str]) -> None:
@@ -255,11 +264,11 @@ def reset_heading_indent(paragraph) -> None:
 
 def reset_body_indent(paragraph) -> None:
     paragraph.paragraph_format.left_indent = Pt(0)
-    paragraph.paragraph_format.first_line_indent = Pt(0)
+    paragraph.paragraph_format.first_line_indent = Pt(24)
     paragraph.paragraph_format.right_indent = Pt(0)
     paragraph.paragraph_format.space_before = Pt(0)
     paragraph.paragraph_format.space_after = Pt(0)
-    reset_paragraph_indent_xml(paragraph)
+    set_paragraph_indent_xml(paragraph, first_line="480", first_line_chars="200")
 
 
 def add_tools_table(document: Document, tools: list[str]) -> None:
@@ -368,13 +377,19 @@ def set_table_cell(cell, value: str) -> None:
 
 
 def reset_paragraph_indent_xml(paragraph) -> None:
+    set_paragraph_indent_xml(paragraph)
+
+
+def set_paragraph_indent_xml(paragraph, first_line: str = "0", first_line_chars: str = "0") -> None:
     paragraph_properties = paragraph._p.get_or_add_pPr()
     indent = paragraph_properties.find(qn("w:ind"))
     if indent is None:
         indent = OxmlElement("w:ind")
         paragraph_properties.append(indent)
-    for attribute in ("w:left", "w:right", "w:firstLine", "w:hanging", "w:leftChars", "w:rightChars", "w:firstLineChars", "w:hangingChars"):
+    for attribute in ("w:left", "w:right", "w:hanging", "w:leftChars", "w:rightChars", "w:hangingChars"):
         indent.set(qn(attribute), "0")
+    indent.set(qn("w:firstLine"), first_line)
+    indent.set(qn("w:firstLineChars"), first_line_chars)
 
 
 def split_record_lines(record_template: str) -> list[str]:

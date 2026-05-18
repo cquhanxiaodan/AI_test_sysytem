@@ -3,7 +3,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 from docx import Document
 from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT
-from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
+from docx.enum.text import WD_PARAGRAPH_ALIGNMENT, WD_TAB_ALIGNMENT
 from docx.oxml.ns import qn
 from docx.shared import Pt
 from docx.table import Table
@@ -292,9 +292,9 @@ def test_validation_plan_export_body_paragraphs_have_consistent_indent() -> None
     for paragraph in document.paragraphs:
         if paragraph.text in expected_body_lines or paragraph.text.startswith("1. "):
             assert paragraph.paragraph_format.left_indent == Pt(0)
-            assert paragraph.paragraph_format.first_line_indent == Pt(0)
             assert paragraph._p.pPr.ind.get(qn("w:leftChars")) == "0"
-            assert paragraph._p.pPr.ind.get(qn("w:firstLineChars")) == "0"
+            assert paragraph._p.pPr.ind.get(qn("w:firstLine")) == "480"
+            assert paragraph._p.pPr.ind.get(qn("w:firstLineChars")) == "200"
 
 
 def test_validation_plan_export_renders_structured_tables() -> None:
@@ -408,8 +408,13 @@ def test_validation_plan_export_rebuilds_toc_with_current_items() -> None:
     assert exported.status_code == 200
     document = Document(exported.json()["storage_path"])
     body_text = "\n".join(paragraph.text for paragraph in document.paragraphs)
+    toc_title = next(paragraph for paragraph in document.paragraphs if paragraph.text == "目 录")
+    toc_item = next(paragraph for paragraph in document.paragraphs if paragraph.text.startswith(f"3.1 {expected_title}"))
+    assert toc_title.alignment == WD_PARAGRAPH_ALIGNMENT.CENTER
+    assert toc_title.runs[0].bold is True
+    assert toc_item.text == f"3.1 {expected_title}\t5"
+    assert toc_item.paragraph_format.tab_stops[0].alignment == WD_TAB_ALIGNMENT.RIGHT
     assert f"3.1 {expected_title}" in body_text
-    assert f"3.1 {expected_title}" + "." in body_text
     assert "整机安装适配测试" not in body_text
 
 
