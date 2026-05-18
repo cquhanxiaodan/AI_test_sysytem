@@ -78,8 +78,6 @@ def rewrite_test_item_section(output_path: Path, plan: ValidationPlanRead) -> No
         add_test_item_subsection(document, item.sequence, 5, "测试连接图或照片", item.connection_media or "待补充")
         add_test_item_subsection(document, item.sequence, 6, "测试记录", item.record_template)
         add_test_item_subsection(document, item.sequence, 7, "需求符合性和BUG信息", item.compliance_bug_info)
-        if item.source_section_text:
-            add_test_item_subsection(document, item.sequence, 8, "原始测试项目章节", item.source_section_text)
     document.save(output_path)
 
 

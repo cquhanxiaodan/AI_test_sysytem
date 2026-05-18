@@ -260,6 +260,7 @@ def test_validation_plan_export_uses_structured_test_item_headings() -> None:
     heading_texts = [paragraph.text for paragraph in document.paragraphs if paragraph.style.name.startswith("Heading")]
     assert any(text.startswith("3.1 ") for text in heading_texts)
     assert any(text.startswith("3.1.7 需求符合性和BUG信息") for text in heading_texts)
+    assert all(not text.startswith("3.1.8") for text in heading_texts)
 
 
 def test_validation_plan_status_can_be_updated_and_export_marks_exported() -> None:
