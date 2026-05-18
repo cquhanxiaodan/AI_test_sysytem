@@ -277,6 +277,11 @@ export default function RequirementAnalysisPage() {
     setSelectedRecommendationIds(analysis.recommendations.filter((item) => !selectedIds.has(item.id)).map((item) => item.id));
   }
 
+  function selectAllRecommendations() {
+    if (!analysis) return;
+    setSelectedRecommendationIds(analysis.recommendations.map((item) => item.id));
+  }
+
   async function runRecommendationBatchAction(action: "include-local" | "confirm" | "exclude" | "delete") {
     if (!analysis || selectedRecommendationIds.length === 0) return;
     const selectedIds = new Set(selectedRecommendationIds.map(String));
@@ -499,6 +504,7 @@ export default function RequirementAnalysisPage() {
                   </Button>
                 </Space>
                 <Space wrap>
+                  <Button size="small" disabled={analysis.recommendations.length === 0} onClick={selectAllRecommendations}>全选</Button>
                   <Button size="small" disabled={analysis.recommendations.length === 0} onClick={invertSelectedRecommendations}>反选</Button>
                   <Button size="small" danger disabled={selectedRecommendationIds.length === 0} onClick={() => {
                     Modal.confirm({
