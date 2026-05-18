@@ -261,6 +261,10 @@ export default function RequirementAnalysisPage() {
     message.success("已纳入本地测试条目资产草稿，当前审核状态保持不变");
   }
 
+  function canIncludeLocal(item: RequirementRecommendation) {
+    return ["ai_generated", "manual"].includes(item.source_type);
+  }
+
   function statusTag(status: string) {
     const color = status === "confirmed" ? "green" : status === "excluded" ? "red" : "gold";
     const label = status === "confirmed" ? "已确认" : status === "excluded" ? "已排除" : "待审核";
@@ -449,7 +453,7 @@ export default function RequirementAnalysisPage() {
             renderItem={(item) => (
               <List.Item
                 actions={[
-                  item.source_type === "ai_generated" && <Button key="include-local" size="small" type="link" onClick={() => includeLocalRecommendation(item)}>纳入本地</Button>,
+                  canIncludeLocal(item) && <Button key="include-local" size="small" type="link" onClick={() => includeLocalRecommendation(item)}>纳入本地</Button>,
                   <Button key="confirm" size="small" type="link" onClick={() => setRecommendationStatus(item, "confirmed")}>确认</Button>,
                   <Button key="exclude" size="small" type="link" danger onClick={() => setRecommendationStatus(item, "excluded")}>排除</Button>,
                   <Button key="edit" size="small" type="link" onClick={() => openEditRecommendation(item)}>编辑</Button>,
@@ -461,7 +465,8 @@ export default function RequirementAnalysisPage() {
                   <>
                     <Tag color={item.source_type === "ai_generated" ? "purple" : "blue"}>{item.group}</Tag>
                     {item.source_type === "ai_generated" && <Tag color="purple">AI新增</Tag>}
-                    {item.source_type === "test_item" && item.source_id !== "manual" && item.review_status === "pending" && <Tag color="cyan">已纳入本地草稿</Tag>}
+                    {item.source_type === "manual" && <Tag color="orange">人工新增</Tag>}
+                    {item.source_type === "test_item" && item.source_id !== "manual" && <Tag color="cyan">已纳入本地草稿</Tag>}
                     {statusTag(item.review_status)}{item.title}
                   </>
                 }

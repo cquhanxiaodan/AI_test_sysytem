@@ -527,6 +527,44 @@ def test_include_ai_recommendation_reuses_existing_local_test_item(monkeypatch) 
     assert updated["source_id"] == matching_items[0].id
 
 
+def test_include_manual_recommendation_in_local_test_items() -> None:
+    headers = auth_headers()
+    seed_assets(headers)
+    created = client.post(
+        "/api/requirement-analyses",
+        headers=headers,
+        json={"project_id": "project-g99-rfid", "description": "DNBSEQ-G99 引入二供供应商康奈特 RFID"},
+    )
+    analysis = created.json()
+    added = client.post(
+        f"/api/requirement-analyses/{analysis['id']}/recommendations",
+        headers=headers,
+        json={
+            "group": "人工补充",
+            "title": "人工新增 RFID 兼容性测试",
+            "source_type": "manual",
+            "source_id": "manual",
+            "reason": "人工新增",
+            "evidence": "测试工程师补充",
+        },
+    )
+    recommendation = added.json()["recommendations"][-1]
+
+    included = client.post(
+        f"/api/requirement-analyses/{analysis['id']}/recommendations/{recommendation['id']}/include-local",
+        headers=headers,
+    )
+
+    assert included.status_code == 200
+    updated = next(item for item in included.json()["recommendations"] if item["id"] == recommendation["id"])
+    assert updated["source_type"] == "test_item"
+    assert updated["review_status"] == "confirmed"
+    local_item = next(item for item in list_test_items("project-g99-rfid") if item.id == updated["source_id"])
+    assert local_item.title == "人工新增 RFID 兼容性测试"
+    assert local_item.source_type == "ai_generated"
+    assert local_item.status == "draft"
+
+
 def test_requirement_recommendation_review_crud() -> None:
     headers = auth_headers()
     seed_assets(headers)
