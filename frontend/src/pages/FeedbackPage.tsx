@@ -62,6 +62,8 @@ export default function FeedbackPage() {
     { title: "详细内容", dataIndex: "content", ellipsis: true },
     { title: "状态", dataIndex: "status", width: 120, render: statusTag },
     { title: "管理员回复", dataIndex: "admin_reply", ellipsis: true, render: (value: string) => value || "-" },
+    { title: "回复日期", dataIndex: "replied_at", width: 180, render: (value: string | null) => value ? new Date(value).toLocaleString() : "-" },
+    { title: "最近更新", dataIndex: "updated_at", width: 180, render: (value: string) => new Date(value).toLocaleString() },
     {
       title: "操作",
       width: 120,
