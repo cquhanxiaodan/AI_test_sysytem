@@ -26,7 +26,7 @@ type DocumentImportForm = {
   import_directory: string;
 };
 
-type DictionaryForm = Required<SystemConfigUpdate>;
+type DictionaryForm = Required<Omit<SystemConfigUpdate, "template_section_aliases">>;
 
 const SECTION_ALIAS_LABELS: Record<string, string> = {
   objective: "测试目的/测试标准",
@@ -45,6 +45,7 @@ export default function SettingsPage() {
   const [aiConfig, setAiConfig] = useState<AiConfig | null>(null);
   const [documentImportConfig, setDocumentImportConfig] = useState<DocumentImportConfig | null>(null);
   const [systemConfig, setSystemConfig] = useState<SystemConfig | null>(null);
+  const [templateSectionAliases, setTemplateSectionAliases] = useState<Record<string, string[]>>({});
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savingDocumentImport, setSavingDocumentImport] = useState(false);
@@ -80,13 +81,13 @@ export default function SettingsPage() {
     fetchSystemConfig()
       .then((config) => {
         setSystemConfig(config);
+        setTemplateSectionAliases(config.template_section_aliases);
         dictionaryForm.setFieldsValue({
           subsystem_catalog: config.subsystem_catalog,
           document_types: config.document_types,
           test_levels: config.test_levels,
           test_types: config.test_types,
           change_types: config.change_types,
-          template_section_aliases: config.template_section_aliases,
         });
       })
       .catch((error: Error) => message.error(`读取系统字典失败：${error.message}`));
@@ -123,16 +124,16 @@ export default function SettingsPage() {
 
   function saveDictionaries(values: DictionaryForm) {
     setSavingDictionaries(true);
-    updateSystemConfig(values)
+    updateSystemConfig({ ...values, template_section_aliases: templateSectionAliases })
       .then((config) => {
         setSystemConfig(config);
+        setTemplateSectionAliases(config.template_section_aliases);
         dictionaryForm.setFieldsValue({
           subsystem_catalog: config.subsystem_catalog,
           document_types: config.document_types,
           test_levels: config.test_levels,
           test_types: config.test_types,
           change_types: config.change_types,
-          template_section_aliases: config.template_section_aliases,
         });
         message.success("系统字典和模板适配已保存");
       })
@@ -145,13 +146,13 @@ export default function SettingsPage() {
     restoreSystemConfigBackup()
       .then((config) => {
         setSystemConfig(config);
+        setTemplateSectionAliases(config.template_section_aliases);
         dictionaryForm.setFieldsValue({
           subsystem_catalog: config.subsystem_catalog,
           document_types: config.document_types,
           test_levels: config.test_levels,
           test_types: config.test_types,
           change_types: config.change_types,
-          template_section_aliases: config.template_section_aliases,
         });
         message.success("已恢复上一版系统字典");
       })
@@ -260,12 +261,8 @@ export default function SettingsPage() {
           <Form.Item name="change_types" label="变更类型">
             <Select mode="tags" tokenSeparators={[",", "，"]} placeholder="输入后回车添加，例如 供应商变更" />
           </Form.Item>
-          <Form.Item
-            name="template_section_aliases"
-            label="测试条目模板适配"
-            extra="维护不同验证方案/测试规范中的段落别名。每个字段对应一个规范段落，输入后回车添加。"
-          >
-            <SectionAliasEditor />
+          <Form.Item label="测试条目模板适配" extra="维护不同验证方案/测试规范中的段落别名。每个字段对应一个规范段落，输入后回车添加。">
+            <SectionAliasEditor value={templateSectionAliases} onChange={setTemplateSectionAliases} />
           </Form.Item>
           <Space>
             <Button type="primary" htmlType="submit" loading={savingDictionaries}>保存系统字典</Button>
