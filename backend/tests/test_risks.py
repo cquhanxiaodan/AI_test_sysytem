@@ -143,6 +143,20 @@ def test_delete_risk() -> None:
     assert client.get("/api/risks", headers=headers).json() == []
 
 
+def test_publish_single_risk() -> None:
+    headers = auth_headers()
+    created = client.post(
+        "/api/risks/parse",
+        headers=headers,
+        json={"project_id": "project-g99-rfid", "source_type": "jira", "content": "title\nRFID读取失败\n"},
+    ).json()["items"][0]
+
+    response = client.post(f"/api/risks/{created['id']}/publish", headers=headers)
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "published"
+
+
 def test_bulk_publish_risks() -> None:
     headers = auth_headers()
     created = client.post(
@@ -158,3 +172,19 @@ def test_bulk_publish_risks() -> None:
     assert set(response.json()["published_ids"]) == set(risk_ids)
     statuses = {risk["id"]: risk["status"] for risk in client.get("/api/risks", headers=headers).json()}
     assert {statuses[risk_id] for risk_id in risk_ids} == {"published"}
+
+
+def test_bulk_delete_risks() -> None:
+    headers = auth_headers()
+    created = client.post(
+        "/api/risks/parse",
+        headers=headers,
+        json={"project_id": "project-g99-rfid", "source_type": "jira", "content": "title\nRFID读取失败\nRFID写入失败\n"},
+    ).json()["items"]
+    risk_ids = [item["id"] for item in created]
+
+    response = client.post("/api/risks/bulk-delete", headers=headers, json={"risk_ids": risk_ids})
+
+    assert response.status_code == 200
+    assert set(response.json()["deleted_ids"]) == set(risk_ids)
+    assert client.get("/api/risks", headers=headers).json() == []

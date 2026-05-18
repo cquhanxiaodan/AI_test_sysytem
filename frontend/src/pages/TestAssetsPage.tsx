@@ -3,6 +3,7 @@ import type { ColumnsType } from "antd/es/table";
 import { useEffect, useState } from "react";
 import {
   bulkDeleteTestItems,
+  bulkDeleteRisks,
   bulkPublishTestItems,
   bulkPublishTestPackages,
   bulkPublishRisks,
@@ -15,6 +16,7 @@ import {
   fetchTestPackages,
   generateRfidSupplierPackage,
   publishTestPackage,
+  publishRisk,
   fetchRisks,
   parseRisks,
   RiskItem,
@@ -219,6 +221,25 @@ export default function TestAssetsPage() {
     await loadItems();
   }
 
+  async function deleteSelectedRisks() {
+    if (selectedRiskIds.length === 0) return;
+    const result = await bulkDeleteRisks(selectedRiskIds.map(String));
+    setSelectedRiskIds([]);
+    if (result.deleted_ids.length > 0) {
+      message.success(`已删除 ${result.deleted_ids.length} 个风险知识项`);
+    }
+    if (result.skipped.length > 0) {
+      message.warning(`有 ${result.skipped.length} 个风险知识项未删除`);
+    }
+    await loadItems();
+  }
+
+  async function publishSingleRisk(risk: RiskItem) {
+    await publishRisk(risk.id);
+    message.success("风险知识项已发布");
+    await loadItems();
+  }
+
   function invertSelectedRisks() {
     const selectedIds = new Set(selectedRiskIds.map(String));
     setSelectedRiskIds(risks.filter((risk) => !selectedIds.has(risk.id)).map((risk) => risk.id));
@@ -320,6 +341,7 @@ export default function TestAssetsPage() {
       render: (_, risk) => (
         <Space>
           <Button size="small" onClick={() => openEditRisk(risk)}>编辑</Button>
+          <Button size="small" type="primary" disabled={risk.status === "published"} onClick={() => publishSingleRisk(risk)}>发布</Button>
           <Button size="small" danger onClick={() => removeRisk(risk)}>删除</Button>
         </Space>
       ),
@@ -419,6 +441,7 @@ export default function TestAssetsPage() {
                   <Space>
                     <Button disabled={risks.length === 0} onClick={invertSelectedRisks}>反选</Button>
                     <Button type="primary" disabled={selectedRiskIds.length === 0} onClick={publishSelectedRisks}>发布选中风险知识项</Button>
+                    <Button danger disabled={selectedRiskIds.length === 0} onClick={deleteSelectedRisks}>删除选中风险知识项</Button>
                     <Typography.Text type="secondary">已选择 {selectedRiskIds.length} 条</Typography.Text>
                   </Space>
                   <Table

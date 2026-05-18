@@ -51,6 +51,15 @@ class RiskBulkPublishResponse(BaseModel):
     skipped: list[dict[str, str]]
 
 
+class RiskBulkDeleteRequest(BaseModel):
+    risk_ids: list[str]
+
+
+class RiskBulkDeleteResponse(BaseModel):
+    deleted_ids: list[str]
+    skipped: list[dict[str, str]]
+
+
 class RiskParseRequest(BaseModel):
     project_id: str
     source_type: str

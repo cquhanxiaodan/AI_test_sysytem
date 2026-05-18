@@ -170,6 +170,11 @@ export type RiskBulkPublishResult = {
   skipped: Array<{ risk_id: string; reason: string }>;
 };
 
+export type RiskBulkDeleteResult = {
+  deleted_ids: string[];
+  skipped: Array<{ risk_id: string; reason: string }>;
+};
+
 export type RequirementAnalysis = {
   id: string;
   project_id: string;
@@ -638,8 +643,19 @@ export async function deleteRisk(riskId: string) {
   return request<{ deleted_id: string }>(`/api/risks/${riskId}`, { method: "DELETE" });
 }
 
+export async function publishRisk(riskId: string) {
+  return request<RiskItem>(`/api/risks/${riskId}/publish`, { method: "POST" });
+}
+
 export async function bulkPublishRisks(riskIds: string[]) {
   return request<RiskBulkPublishResult>("/api/risks/bulk-publish", {
+    method: "POST",
+    body: JSON.stringify({ risk_ids: riskIds }),
+  });
+}
+
+export async function bulkDeleteRisks(riskIds: string[]) {
+  return request<RiskBulkDeleteResult>("/api/risks/bulk-delete", {
     method: "POST",
     body: JSON.stringify({ risk_ids: riskIds }),
   });

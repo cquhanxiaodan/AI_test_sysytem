@@ -73,7 +73,7 @@ export default function FeedbackPage() {
     <section>
       <Typography.Title level={2}>Bug与需求反馈</Typography.Title>
       <Typography.Paragraph type="secondary">
-        提交使用过程中的 Bug 或新增需求。管理员会在本页回复并更新处理状态。
+        普通用户和管理员都可以提交使用过程中的 Bug 或新增需求。管理员会在本页回复并更新处理状态。
       </Typography.Paragraph>
       <Card title="提交反馈" className="section-card">
         <Form form={form} layout="vertical" onFinish={submitFeedback} initialValues={{ feedback_type: "bug" }}>
@@ -85,7 +85,7 @@ export default function FeedbackPage() {
           </Form.Item>
           <Space>
             <Button type="primary" htmlType="submit">提交反馈</Button>
-            <Typography.Text type="secondary">提交人和日期会由系统自动记录。</Typography.Text>
+            <Typography.Text type="secondary">当前提交人：{user?.display_name ?? "当前用户"}；提交日期由系统自动记录。</Typography.Text>
           </Space>
         </Form>
       </Card>
