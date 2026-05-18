@@ -176,7 +176,7 @@ def test_requirement_analysis_skips_package_knowledge_and_merges_similar_titles(
             SearchResult(
                 source_type="test_package",
                 source_id="pkg-duplicate",
-                title="RFID 供应商变更验证包",
+                title="RFID测试归口包",
                 text="整个归口包命中",
                 score=1,
             ),
@@ -206,7 +206,7 @@ def test_requirement_analysis_skips_package_knowledge_and_merges_similar_titles(
 
     assert response.status_code == 200
     titles = [item["title"] for item in response.json()["recommendations"]]
-    assert "RFID 供应商变更验证包" not in titles
+    assert "RFID测试归口包" not in titles
     assert "整机装配测试" not in titles
     assert "整机安装适配测试" not in titles
     assert "RFID 在机装配测试" in titles
@@ -410,7 +410,7 @@ def test_include_ai_recommendation_in_local_test_items(monkeypatch) -> None:
     local_item = next(item for item in list_test_items("project-g99-rfid") if item.id == updated["source_id"])
     assert local_item.title == "新增 RFID 异常断电恢复测试"
     assert local_item.status == "published"
-    package = next(package for package in list_packages("project-g99-rfid") if package.name == "RFID 供应商变更验证包")
+    package = next(package for package in list_packages("project-g99-rfid") if package.name == "RFID测试归口包")
     assert any(item.test_item_id == local_item.id for item in package.items)
 
 

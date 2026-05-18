@@ -48,6 +48,7 @@ export default function TestAssetsPage() {
   const [loading, setLoading] = useState(false);
   const [form] = Form.useForm<{ documentId: string }>();
   const [editForm] = Form.useForm<TestItemUpdate>();
+  const selectedPrimarySubsystem = Form.useWatch("primary_subsystem", editForm);
   const [packageForm] = Form.useForm<TestPackageUpdate & { items_text?: string }>();
   const [riskForm] = Form.useForm<RiskUpdate>();
 
@@ -109,7 +110,7 @@ export default function TestAssetsPage() {
 
   function openEditItem(item: TestItemAsset) {
     setEditingItem(item);
-    editForm.setFieldsValue({ ...item, module: item.module ? [item.module] : [] } as unknown as TestItemUpdate);
+    editForm.setFieldsValue(item);
   }
 
   async function saveEditingItem() {
@@ -127,7 +128,7 @@ export default function TestAssetsPage() {
   async function generatePackage() {
     if (!currentProject) return;
     const packageAsset = await generateRfidSupplierPackage(currentProject.id);
-    message.success(`RFID 供应商变更验证包已生成，包含 ${packageAsset.items.length} 个条目`);
+    message.success(`${packageAsset.name} 已生成，包含 ${packageAsset.items.length} 个条目`);
     await loadItems();
   }
 
@@ -431,7 +432,7 @@ export default function TestAssetsPage() {
                     {
                       key: "package",
                       label: "手动补生成归口包",
-                      children: <Button type="primary" onClick={generatePackage}>补生成 RFID 供应商变更验证包</Button>,
+                      children: <Button type="primary" onClick={generatePackage}>补生成 RFID 测试归口包</Button>,
                     },
                     {
                       key: "risk",
@@ -467,7 +468,7 @@ export default function TestAssetsPage() {
             <Select showSearch options={(systemConfig?.subsystem_catalog ?? []).map((value) => ({ label: value, value }))} />
           </Form.Item>
           <Form.Item label="模块" name="module">
-            <Select mode="tags" maxCount={1} tokenSeparators={[",", "，"]} options={["RFID"].map((value) => ({ label: value, value }))} />
+            <Select showSearch allowClear placeholder="请先选择主子系统，再选择模块" options={toOptions(moduleOptions(systemConfig, selectedPrimarySubsystem))} />
           </Form.Item>
           <Form.Item label="关联子系统" name="related_subsystems">
             <Select mode="multiple" options={(systemConfig?.subsystem_catalog ?? []).map((value) => ({ label: value, value }))} />
@@ -531,4 +532,14 @@ export default function TestAssetsPage() {
       </Modal>
     </section>
   );
+}
+
+function toOptions(values: string[]) {
+  return values.map((value) => ({ label: value, value }));
+}
+
+function moduleOptions(systemConfig: SystemConfig | null, subsystem?: string) {
+  if (!systemConfig) return [];
+  if (subsystem && systemConfig.subsystem_modules[subsystem]) return systemConfig.subsystem_modules[subsystem];
+  return Object.values(systemConfig.subsystem_modules || {}).flat();
 }

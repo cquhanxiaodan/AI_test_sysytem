@@ -90,7 +90,7 @@ def test_sqlalchemy_parsing_and_test_asset_round_trip(tmp_path: Path) -> None:
         published_package = publish_package(package.id)
         assert published_package is not None
         assert published_package.status == "published"
-        assert list_packages("project-g99-rfid")[0].name == "RFID 供应商变更验证包"
+        assert list_packages("project-g99-rfid")[0].name == "RFID测试归口包"
     finally:
         restore_defaults()
 
@@ -153,11 +153,13 @@ def test_sqlalchemy_requirement_ai_and_audit_round_trip(tmp_path: Path) -> None:
 def test_sqlalchemy_system_config_round_trip(tmp_path: Path) -> None:
     configure_sqlite(tmp_path)
     try:
-        updated = update_config(SystemConfigUpdate(subsystem_catalog=["RFID", "流体系统"], test_types=["功能测试", "可靠性测试"]))
+        updated = update_config(SystemConfigUpdate(subsystem_catalog=["RFID", "流体系统"], subsystem_modules={"RFID": ["读写模块"]}, test_types=["功能测试", "可靠性测试"]))
 
         assert updated.subsystem_catalog == ["RFID", "流体系统"]
+        assert updated.subsystem_modules == {"RFID": ["读写模块"]}
         persisted = get_config()
         assert persisted.subsystem_catalog == ["RFID", "流体系统"]
+        assert persisted.subsystem_modules == {"RFID": ["读写模块"]}
         assert persisted.test_types == ["功能测试", "可靠性测试"]
     finally:
         restore_defaults()

@@ -33,6 +33,14 @@ class SystemConfigRecord(Base):
 
 CONFIG = SystemConfig(
     subsystem_catalog=["电子子系统", "液路系统", "光学系统", "温控系统", "运动控制", "整机系统"],
+    subsystem_modules={
+        "电子子系统": ["RFID", "主控板", "电源模块"],
+        "液路系统": ["泵", "阀", "管路", "流体传感器"],
+        "光学系统": ["相机", "光源", "物镜"],
+        "温控系统": ["温控板", "加热模块", "制冷模块"],
+        "运动控制": ["电机", "导轨", "运动控制板"],
+        "整机系统": ["整机装配", "外壳", "EMC"],
+    },
     document_types=["验证方案", "测试规范", "测试报告", "Jira导出", "DFMEA"],
     test_levels=["部件级", "子系统级", "系统级", "整机级", "回归验证"],
     test_types=["功能测试", "性能测试", "装配兼容性", "安规 EMC", "回归测试"],
@@ -71,7 +79,12 @@ def update_config(payload: SystemConfigUpdate) -> SystemConfig:
     for key, value in updates.items():
         if value is None:
             continue
-        cleaned_updates[key] = normalize_template_section_aliases(value) if key == "template_section_aliases" else normalize_options(value)
+        if key == "template_section_aliases":
+            cleaned_updates[key] = normalize_template_section_aliases(value)
+        elif key == "subsystem_modules":
+            cleaned_updates[key] = normalize_subsystem_modules(value)
+        else:
+            cleaned_updates[key] = normalize_options(value)
     updated = get_config().model_copy(update=cleaned_updates)
     if _use_sqlalchemy():
         with session_scope() as session:
@@ -261,6 +274,10 @@ def normalize_options(values: list[str]) -> list[str]:
 
 def normalize_template_section_aliases(values: dict[str, list[str]]) -> dict[str, list[str]]:
     return {key: normalize_options(items) for key, items in values.items() if isinstance(items, list)}
+
+
+def normalize_subsystem_modules(values: dict[str, list[str]]) -> dict[str, list[str]]:
+    return {key.strip(): normalize_options(items) for key, items in values.items() if key.strip() and isinstance(items, list)}
 
 
 def create_audit_event(actor_id: str, action: str, target_type: str, target_id: str, detail: str) -> AuditEvent:

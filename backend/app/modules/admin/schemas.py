@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 
 class SystemConfig(BaseModel):
     subsystem_catalog: list[str]
+    subsystem_modules: dict[str, list[str]] = Field(default_factory=dict)
     document_types: list[str]
     test_levels: list[str]
     test_types: list[str]
@@ -29,6 +30,7 @@ class SystemSettingsFile(BaseModel):
 
 class SystemConfigUpdate(BaseModel):
     subsystem_catalog: list[str] | None = None
+    subsystem_modules: dict[str, list[str]] | None = None
     document_types: list[str] | None = None
     test_levels: list[str] | None = None
     test_types: list[str] | None = None

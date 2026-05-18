@@ -269,6 +269,7 @@ export type AcceptanceStatus = {
 
 export type SystemConfig = {
   subsystem_catalog: string[];
+  subsystem_modules: Record<string, string[]>;
   document_types: string[];
   test_levels: string[];
   test_types: string[];
@@ -278,7 +279,7 @@ export type SystemConfig = {
   validation_template_version: string;
 };
 
-export type SystemConfigUpdate = Partial<Pick<SystemConfig, "subsystem_catalog" | "document_types" | "test_levels" | "test_types" | "change_types" | "template_section_aliases">>;
+export type SystemConfigUpdate = Partial<Pick<SystemConfig, "subsystem_catalog" | "subsystem_modules" | "document_types" | "test_levels" | "test_types" | "change_types" | "template_section_aliases">>;
 
 export type AiConfig = {
   provider: string;

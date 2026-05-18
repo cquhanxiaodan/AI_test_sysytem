@@ -33,6 +33,7 @@ export default function DocumentPoolPage() {
   const [selectedDocumentIds, setSelectedDocumentIds] = useState<React.Key[]>([]);
   const [systemConfig, setSystemConfig] = useState<SystemConfig | null>(null);
   const [form] = Form.useForm<Record<string, string>>();
+  const selectedSubsystem = Form.useWatch("subsystem", form);
 
   async function loadDocuments() {
     setLoading(true);
@@ -106,7 +107,7 @@ export default function DocumentPoolPage() {
     await reviewDocument(document.id, "publish", "前端审核通过");
     const documentType = document.labels.document_type || document.label_suggestions.find((suggestion) => suggestion.label_key === "document_type")?.label_value || "";
     if (["验证方案", "测试规范", "测试报告"].includes(documentType)) {
-      message.success("资料已发布，系统已自动拆分测试条目；RFID 资料会同步生成归口包");
+      message.success("资料已发布，系统已自动拆分测试条目；测试条目发布后会按模块或子系统归并归口包");
     } else if (["Jira导出", "DFMEA"].includes(documentType)) {
       message.success("资料已发布，系统已自动解析风险知识源");
     } else {
@@ -241,7 +242,7 @@ export default function DocumentPoolPage() {
             <Select showSearch allowClear placeholder="请选择子系统" options={toOptions(systemConfig?.subsystem_catalog || [])} />
           </Form.Item>
           <Form.Item label="模块" name="module">
-            <Select showSearch allowClear placeholder="请选择或输入模块" options={toOptions(["RFID"])} />
+            <Select showSearch allowClear placeholder="请先选择子系统，再选择模块" options={toOptions(moduleOptions(systemConfig, selectedSubsystem))} />
           </Form.Item>
           <Form.Item label="文档类型" name="document_type">
             <Select showSearch allowClear placeholder="请选择文档类型" options={toOptions(systemConfig?.document_types || [])} />
@@ -257,4 +258,10 @@ export default function DocumentPoolPage() {
 
 function toOptions(values: string[]) {
   return values.map((value) => ({ label: value, value }));
+}
+
+function moduleOptions(systemConfig: SystemConfig | null, subsystem?: string) {
+  if (!systemConfig) return [];
+  if (subsystem && systemConfig.subsystem_modules[subsystem]) return systemConfig.subsystem_modules[subsystem];
+  return Object.values(systemConfig.subsystem_modules || {}).flat();
 }

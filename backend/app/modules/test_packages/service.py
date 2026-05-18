@@ -10,7 +10,7 @@ from app.modules.test_items.service import list_test_items
 from app.modules.test_packages.schemas import TestPackageAsset, TestPackageItem, TestPackageUpdate
 
 TEST_PACKAGES: dict[str, TestPackageAsset] = {}
-RFID_SUPPLIER_PACKAGE_NAME = "RFID 供应商变更验证包"
+RFID_SUPPLIER_PACKAGE_NAME = "RFID测试归口包"
 
 
 class TestPackageRecord(Base):
@@ -96,9 +96,9 @@ def assign_item_to_package(item) -> TestPackageAsset:
 
 def package_name_for_item(item) -> str:
     if item.module:
-        return RFID_SUPPLIER_PACKAGE_NAME if item.module == "RFID" else f"{item.module} 变更验证包"
+        return f"{item.module}测试归口包"
     subsystem = item.primary_subsystem or "待确认子系统"
-    return f"{subsystem} 变更验证包"
+    return f"{subsystem}测试归口包"
 
 
 def find_suitable_package_for_item(item, package_name: str) -> TestPackageAsset | None:

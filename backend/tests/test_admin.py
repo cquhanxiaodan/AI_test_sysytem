@@ -29,6 +29,7 @@ def test_get_system_config() -> None:
 
     assert response.status_code == 200
     assert "电子子系统" in response.json()["subsystem_catalog"]
+    assert "RFID" in response.json()["subsystem_modules"]["电子子系统"]
 
 
 def test_admin_can_update_system_dictionary_options() -> None:
@@ -37,6 +38,7 @@ def test_admin_can_update_system_dictionary_options() -> None:
         headers=auth_headers(),
         json={
             "subsystem_catalog": ["RFID", "流体系统", "RFID"],
+            "subsystem_modules": {"RFID": ["读写模块", "读写模块", "天线"], "流体系统": ["泵"]},
             "test_levels": ["部件级", "整机级"],
             "test_types": ["功能测试", "可靠性测试"],
         },
@@ -44,6 +46,7 @@ def test_admin_can_update_system_dictionary_options() -> None:
 
     assert response.status_code == 200
     assert response.json()["subsystem_catalog"] == ["RFID", "流体系统"]
+    assert response.json()["subsystem_modules"] == {"RFID": ["读写模块", "天线"], "流体系统": ["泵"]}
     assert response.json()["test_levels"] == ["部件级", "整机级"]
     assert response.json()["test_types"] == ["功能测试", "可靠性测试"]
 

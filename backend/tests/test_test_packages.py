@@ -53,7 +53,7 @@ def test_generate_rfid_supplier_change_package() -> None:
 
     assert response.status_code == 200
     package = response.json()
-    assert package["name"] == "RFID 供应商变更验证包"
+    assert package["name"] == "RFID测试归口包"
     assert len(package["items"]) == 5
     assert {item["relation_type"] for item in package["items"]} == {"required", "suggested", "conditional"}
 
@@ -105,11 +105,11 @@ def test_update_test_package_returns_to_draft() -> None:
     response = client.patch(
         f"/api/test-packages/{package['id']}",
         headers=headers,
-        json={"name": "RFID 供应商变更验证包 V2", "recommendation_level": "medium"},
+        json={"name": "RFID测试归口包 V2", "recommendation_level": "medium"},
     )
 
     assert response.status_code == 200
-    assert response.json()["name"] == "RFID 供应商变更验证包 V2"
+    assert response.json()["name"] == "RFID测试归口包 V2"
     assert response.json()["recommendation_level"] == "medium"
     assert response.json()["status"] == "draft"
 

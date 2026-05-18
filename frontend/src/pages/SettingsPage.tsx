@@ -46,6 +46,7 @@ export default function SettingsPage() {
   const [documentImportConfig, setDocumentImportConfig] = useState<DocumentImportConfig | null>(null);
   const [systemConfig, setSystemConfig] = useState<SystemConfig | null>(null);
   const [templateSectionAliases, setTemplateSectionAliases] = useState<Record<string, string[]>>({});
+  const [subsystemModules, setSubsystemModules] = useState<Record<string, string[]>>({});
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savingDocumentImport, setSavingDocumentImport] = useState(false);
@@ -82,8 +83,10 @@ export default function SettingsPage() {
       .then((config) => {
         setSystemConfig(config);
         setTemplateSectionAliases(config.template_section_aliases);
+        setSubsystemModules(config.subsystem_modules || {});
         dictionaryForm.setFieldsValue({
           subsystem_catalog: config.subsystem_catalog,
+          subsystem_modules: config.subsystem_modules,
           document_types: config.document_types,
           test_levels: config.test_levels,
           test_types: config.test_types,
@@ -124,12 +127,14 @@ export default function SettingsPage() {
 
   function saveDictionaries(values: DictionaryForm) {
     setSavingDictionaries(true);
-    updateSystemConfig({ ...values, template_section_aliases: templateSectionAliases })
+    updateSystemConfig({ ...values, subsystem_modules: subsystemModules, template_section_aliases: templateSectionAliases })
       .then((config) => {
         setSystemConfig(config);
         setTemplateSectionAliases(config.template_section_aliases);
+        setSubsystemModules(config.subsystem_modules || {});
         dictionaryForm.setFieldsValue({
           subsystem_catalog: config.subsystem_catalog,
+          subsystem_modules: config.subsystem_modules,
           document_types: config.document_types,
           test_levels: config.test_levels,
           test_types: config.test_types,
@@ -147,8 +152,10 @@ export default function SettingsPage() {
       .then((config) => {
         setSystemConfig(config);
         setTemplateSectionAliases(config.template_section_aliases);
+        setSubsystemModules(config.subsystem_modules || {});
         dictionaryForm.setFieldsValue({
           subsystem_catalog: config.subsystem_catalog,
+          subsystem_modules: config.subsystem_modules,
           document_types: config.document_types,
           test_levels: config.test_levels,
           test_types: config.test_types,
@@ -241,6 +248,7 @@ export default function SettingsPage() {
         {systemConfig && (
           <Descriptions column={1} size="small" className="section-card">
             <Descriptions.Item label="当前子系统">{systemConfig.subsystem_catalog.join("、")}</Descriptions.Item>
+            <Descriptions.Item label="当前模块字典">{Object.entries(systemConfig.subsystem_modules || {}).map(([subsystem, modules]) => `${subsystem}：${modules.join("、")}`).join("；")}</Descriptions.Item>
             <Descriptions.Item label="当前测试层级">{systemConfig.test_levels.join("、")}</Descriptions.Item>
             <Descriptions.Item label="当前测试类型">{systemConfig.test_types.join("、")}</Descriptions.Item>
           </Descriptions>
@@ -248,6 +256,9 @@ export default function SettingsPage() {
         <Form form={dictionaryForm} layout="vertical" onFinish={saveDictionaries}>
           <Form.Item name="subsystem_catalog" label="子系统目录" extra="用于测试资产的主子系统和关联子系统选项。">
             <Select mode="tags" tokenSeparators={[",", "，"]} placeholder="输入后回车添加，例如 RFID" />
+          </Form.Item>
+          <Form.Item label="子系统-模块联动字典" extra="每个子系统维护独立模块选项，资料标签和测试条目编辑会按子系统联动展示。">
+            <SubsystemModuleEditor subsystems={dictionaryForm.getFieldValue("subsystem_catalog") || systemConfig?.subsystem_catalog || []} value={subsystemModules} onChange={setSubsystemModules} />
           </Form.Item>
           <Form.Item name="test_levels" label="测试层级">
             <Select mode="tags" tokenSeparators={[",", "，"]} placeholder="输入后回车添加，例如 子系统级" />
@@ -292,6 +303,30 @@ function SectionAliasEditor({ value = {}, onChange }: { value?: Record<string, s
             value={value[key] || []}
             placeholder={`输入${label}的模板别名`}
             onChange={(aliases) => updateAlias(key, aliases)}
+          />
+        </div>
+      ))}
+    </Space>
+  );
+}
+
+function SubsystemModuleEditor({ subsystems, value = {}, onChange }: { subsystems: string[]; value?: Record<string, string[]>; onChange?: (value: Record<string, string[]>) => void }) {
+  function updateModules(subsystem: string, modules: string[]) {
+    onChange?.({ ...value, [subsystem]: modules });
+  }
+
+  return (
+    <Space direction="vertical" className="full-width" size="middle">
+      {subsystems.map((subsystem) => (
+        <div key={subsystem}>
+          <Typography.Text strong>{subsystem}</Typography.Text>
+          <Select
+            mode="tags"
+            className="full-width"
+            tokenSeparators={[",", "，"]}
+            value={value[subsystem] || []}
+            placeholder={`输入${subsystem}下的模块，回车添加`}
+            onChange={(modules) => updateModules(subsystem, modules)}
           />
         </div>
       ))}
