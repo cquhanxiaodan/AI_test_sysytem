@@ -312,6 +312,38 @@ def test_confirm_test_item_matches_package_globally_by_module() -> None:
     assert {item.test_item_id for item in package.items} == {first_item_id, second_item_id}
 
 
+def test_confirm_test_item_ignores_change_type_when_matching_module_package() -> None:
+    headers = auth_headers()
+    first_upload = client.post(
+        "/api/documents/upload",
+        headers=headers,
+        data={"project_id": "project-g99-rfid"},
+        files={"file": ("RFID验证方案.txt", b"RFID", "text/plain")},
+    )
+    first_split = client.post(f"/api/test-items/split/{first_upload.json()['document']['id']}", headers=headers)
+    first_item_id = first_split.json()["items"][0]["id"]
+    client.post(f"/api/test-items/{first_item_id}/confirm", headers=headers)
+    package = next(iter(TEST_PACKAGES.values()))
+    TEST_PACKAGES[package.id] = package.model_copy(update={"change_type": "设计变更"})
+
+    second_upload = client.post(
+        "/api/documents/upload",
+        headers=headers,
+        data={"project_id": "project-mgi-platform"},
+        files={"file": ("另一项目RFID验证方案.txt", b"RFID", "text/plain")},
+    )
+    second_split = client.post(f"/api/test-items/split/{second_upload.json()['document']['id']}", headers=headers)
+    second_item_id = second_split.json()["items"][1]["id"]
+
+    response = client.post(f"/api/test-items/{second_item_id}/confirm", headers=headers)
+
+    assert response.status_code == 200
+    assert len(TEST_PACKAGES) == 1
+    package = next(iter(TEST_PACKAGES.values()))
+    assert package.change_type == "设计变更"
+    assert {item.test_item_id for item in package.items} == {first_item_id, second_item_id}
+
+
 def test_update_test_item_allows_engineer_corrections() -> None:
     headers = auth_headers()
     upload = client.post(

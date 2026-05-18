@@ -105,17 +105,16 @@ def find_suitable_package_for_item(item, package_name: str) -> TestPackageAsset 
     module = item.module or ""
     subsystem = item.primary_subsystem or "待确认子系统"
     test_object = module or subsystem
-    change_type = "供应商变更" if "供应商变更" in item.risk_tags or is_rfid_related_item(item) else "变更验证"
     packages = list_packages()
     if module:
-        matched = next((package for package in packages if package.test_object == module and package.change_type == change_type), None)
+        matched = next((package for package in packages if package.test_object == module), None)
         if matched is not None:
             return matched
     return next(
         (
             package
             for package in packages
-            if package.test_object == test_object and package.change_type == change_type
+            if package.test_object == test_object
         ),
         None,
     ) or find_package_by_name(package_name)
