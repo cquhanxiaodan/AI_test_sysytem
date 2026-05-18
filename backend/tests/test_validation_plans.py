@@ -291,7 +291,16 @@ def test_validation_plan_export_renders_structured_tables() -> None:
     table_headers = [tuple(cell.text for cell in table.rows[0].cells) for table in document.tables]
     table_rows = [tuple(cell.text for cell in row.cells) for table in document.tables for row in table.rows]
     assert ("序号", "名称", "设备型号", "制造商", "设备编码", "校准有效期") in table_headers
-    assert any("记录项目" in row and "判定标准" in row for row in table_rows)
+    assert any("记录项目" in "".join(row) and "判定标准" in "".join(row) for row in table_rows)
+    record_table = next(
+        table
+        for table in document.tables
+        if len(table.rows) > 3 and any("记录项目" in cell.text for cell in table.rows[3].cells)
+    )
+    assert len(record_table.columns) == 9
+    assert record_table.rows[0].cells[0]._tc is record_table.rows[0].cells[1]._tc
+    assert record_table.rows[0].cells[4]._tc is record_table.rows[0].cells[5]._tc
+    assert record_table.rows[0].cells[6]._tc is record_table.rows[0].cells[8]._tc
     assert ("序号", "需求编号/DFMEA编号/风险管理编号", "需求描述", "测试结论", "备注") in table_headers
     assert ("序号", "问题描述", "涉及需求编号", "BUG编号（JIRA系统）", "RPN", "Bug解决状态") in table_headers
     body_items = list(iter_document_body_items(document))
@@ -379,6 +388,7 @@ def test_validation_plan_export_rebuilds_toc_with_current_items() -> None:
     document = Document(exported.json()["storage_path"])
     body_text = "\n".join(paragraph.text for paragraph in document.paragraphs)
     assert f"3.1 {expected_title}" in body_text
+    assert f"3.1 {expected_title}" + "." in body_text
     assert "整机安装适配测试" not in body_text
 
 

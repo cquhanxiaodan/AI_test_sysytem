@@ -137,18 +137,23 @@ def find_toc_element(document: Document):
 
 
 def build_toc_lines(plan: ValidationPlanRead) -> list[str]:
-    lines: list[str] = [
+    lines = [
         "目 录",
-        "1 概述",
-        "1.1 验证的背景、目的和范围",
-        "1.2 DUT描述",
-        "1.3 参考文档",
-        "2 测试项目列表",
-        "3 测试项目",
+        format_toc_line("1 概述", 3),
+        format_toc_line("1.1 验证的背景、目的和范围", 3),
+        format_toc_line("1.2 DUT描述", 3),
+        format_toc_line("1.3 参考文档", 3),
+        format_toc_line("2 测试项目列表", 4),
+        format_toc_line("3 测试项目", 5),
     ]
     for item in plan.items:
-        lines.append(f"3.{item.sequence} {item.title}")
+        lines.append(format_toc_line(f"3.{item.sequence} {item.title}", 5))
     return lines
+
+
+def format_toc_line(title: str, page_number: int) -> str:
+    dot_count = max(6, 36 - len(title))
+    return f"{title}{'.' * dot_count}{page_number}"
 
 
 def replace_heading_body_with_paragraphs(document: Document, heading_texts: list[str], values: list[str]) -> None:
@@ -252,14 +257,37 @@ def add_tools_table(document: Document, tools: list[str]) -> None:
 
 def add_record_table(document: Document, title: str, record_template: str) -> None:
     records = split_record_lines(record_template) or [title]
-    table = document.add_table(rows=len(records) + 4, cols=7)
+    table = document.add_table(rows=len(records) + 4, cols=9)
     table.style = "Table Grid"
-    set_table_row(table.rows[0].cells, ["环境温度", "", "", "相对湿度", "", "", ""])
-    set_table_row(table.rows[1].cells, ["测试时间", "", "", "测试地点", "", "", ""])
-    set_table_row(table.rows[2].cells, ["测试人员", "", "", "测试结论", "", "", ""])
-    set_table_row(table.rows[3].cells, ["序号", "记录项目", "记录数据（单位）", "处理结果（单位）", "判定标准", "结果", "备注"])
+    merge_record_meta_row(table.rows[0], "环境温度", "相对湿度")
+    merge_record_meta_row(table.rows[1], "测试时间", "测试地点")
+    merge_record_meta_row(table.rows[2], "测试人员", "测试结论")
+    table.rows[3].cells[1].merge(table.rows[3].cells[2])
+    table.rows[3].cells[3].merge(table.rows[3].cells[4])
+    table.rows[3].cells[5].merge(table.rows[3].cells[6])
+    set_record_row(table.rows[3], ["序号", "记录项目", "记录数据（单位）", "处理结果（单位）", "判定标准", "结果"])
     for index, record in enumerate(records, start=1):
-        set_table_row(table.rows[index + 3].cells, [str(index), record, "", "", record_template or "按测试标准判定。", "□P □F", ""])
+        row = table.rows[index + 3]
+        row.cells[1].merge(row.cells[2])
+        row.cells[3].merge(row.cells[4])
+        row.cells[5].merge(row.cells[6])
+        set_record_row(row, [str(index), record, "", "", record_template or "按测试标准判定。", "□P □F"])
+
+
+def merge_record_meta_row(row, left_label: str, right_label: str) -> None:
+    row.cells[0].merge(row.cells[1])
+    row.cells[2].merge(row.cells[3])
+    row.cells[4].merge(row.cells[5])
+    row.cells[6].merge(row.cells[8])
+    set_table_cell(row.cells[0], left_label)
+    set_table_cell(row.cells[2], "")
+    set_table_cell(row.cells[4], right_label)
+    set_table_cell(row.cells[6], "")
+
+
+def set_record_row(row, values: list[str]) -> None:
+    for cell_index, value in zip([0, 1, 3, 5, 7, 8], values):
+        set_table_cell(row.cells[cell_index], value)
 
 
 def add_compliance_table(document: Document, title: str, compliance_bug_info: str) -> None:
@@ -307,16 +335,20 @@ def add_source_table(document: Document, rows: list[list[str]]) -> None:
 
 def set_table_row(cells, values: list[str]) -> None:
     for cell, value in zip(cells, values):
-        cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
-        cell.text = value
-        for paragraph in cell.paragraphs:
-            paragraph.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
-            paragraph.paragraph_format.left_indent = Pt(0)
-            paragraph.paragraph_format.first_line_indent = Pt(0)
-            paragraph.paragraph_format.right_indent = Pt(0)
-            paragraph.paragraph_format.space_before = Pt(0)
-            paragraph.paragraph_format.space_after = Pt(0)
-            reset_paragraph_indent_xml(paragraph)
+        set_table_cell(cell, value)
+
+
+def set_table_cell(cell, value: str) -> None:
+    cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
+    cell.text = value
+    for paragraph in cell.paragraphs:
+        paragraph.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+        paragraph.paragraph_format.left_indent = Pt(0)
+        paragraph.paragraph_format.first_line_indent = Pt(0)
+        paragraph.paragraph_format.right_indent = Pt(0)
+        paragraph.paragraph_format.space_before = Pt(0)
+        paragraph.paragraph_format.space_after = Pt(0)
+        reset_paragraph_indent_xml(paragraph)
 
 
 def reset_paragraph_indent_xml(paragraph) -> None:
