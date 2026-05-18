@@ -232,7 +232,14 @@ def remove_paragraphs_after(document: Document, start_index: int) -> None:
 
 def add_test_item_subsection(document: Document, sequence: int, subsection: int, title: str, body: str) -> None:
     add_test_item_heading(document, sequence, subsection, title)
-    document.add_paragraph(body or "待补充")
+    add_body_paragraphs(document, body or "待补充")
+
+
+def add_body_paragraphs(document: Document, body: str) -> None:
+    lines = [line.strip() for line in body.splitlines() if line.strip()]
+    for line in lines or ["待补充"]:
+        paragraph = document.add_paragraph(line)
+        reset_body_indent(paragraph)
 
 
 def add_test_item_heading(document: Document, sequence: int, subsection: int, title: str) -> None:
@@ -243,6 +250,15 @@ def reset_heading_indent(paragraph) -> None:
     paragraph.paragraph_format.left_indent = Pt(0)
     paragraph.paragraph_format.first_line_indent = Pt(0)
     paragraph.paragraph_format.right_indent = Pt(0)
+    reset_paragraph_indent_xml(paragraph)
+
+
+def reset_body_indent(paragraph) -> None:
+    paragraph.paragraph_format.left_indent = Pt(0)
+    paragraph.paragraph_format.first_line_indent = Pt(0)
+    paragraph.paragraph_format.right_indent = Pt(0)
+    paragraph.paragraph_format.space_before = Pt(0)
+    paragraph.paragraph_format.space_after = Pt(0)
     reset_paragraph_indent_xml(paragraph)
 
 

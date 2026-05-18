@@ -276,6 +276,27 @@ def test_validation_plan_export_uses_structured_test_item_headings() -> None:
             assert paragraph._p.pPr.ind.get(qn("w:firstLineChars")) == "0"
 
 
+def test_validation_plan_export_body_paragraphs_have_consistent_indent() -> None:
+    headers = auth_headers()
+    seed_assets(headers)
+    analysis_id = create_analysis(headers)
+    recommendation = update_recommendation_status(headers, analysis_id, 0, "confirmed")
+    created = client.post("/api/validation-plans", headers=headers, json={"project_id": "project-g99-rfid"})
+    plan_id = created.json()["id"]
+
+    exported = client.post(f"/api/validation-plans/{plan_id}/export", headers=headers)
+
+    assert exported.status_code == 200
+    document = Document(exported.json()["storage_path"])
+    expected_body_lines = [recommendation["objective"], recommendation["method"]]
+    for paragraph in document.paragraphs:
+        if paragraph.text in expected_body_lines or paragraph.text.startswith("1. "):
+            assert paragraph.paragraph_format.left_indent == Pt(0)
+            assert paragraph.paragraph_format.first_line_indent == Pt(0)
+            assert paragraph._p.pPr.ind.get(qn("w:leftChars")) == "0"
+            assert paragraph._p.pPr.ind.get(qn("w:firstLineChars")) == "0"
+
+
 def test_validation_plan_export_renders_structured_tables() -> None:
     headers = auth_headers()
     seed_assets(headers)
