@@ -5,6 +5,7 @@ from app.main import app
 from app.modules.documents.repository import DOCUMENTS
 from app.modules.parsing.service import CHUNKS, TASKS
 from app.modules.test_items.service import TEST_ITEMS
+from app.modules.test_packages.service import TEST_PACKAGES
 
 
 client = TestClient(app)
@@ -22,6 +23,7 @@ def setup_function() -> None:
     TASKS.clear()
     CHUNKS.clear()
     TEST_ITEMS.clear()
+    TEST_PACKAGES.clear()
 
 
 def auth_headers() -> dict[str, str]:
@@ -221,6 +223,37 @@ def test_confirm_test_item_publishes_asset() -> None:
 
     assert response.status_code == 200
     assert response.json()["status"] == "published"
+    assert len(TEST_PACKAGES) == 1
+    assert next(iter(TEST_PACKAGES.values())).items[0].test_item_id == item_id
+
+
+def test_confirm_new_test_item_adds_to_existing_package() -> None:
+    headers = auth_headers()
+    first_upload = client.post(
+        "/api/documents/upload",
+        headers=headers,
+        data={"project_id": "project-g99-rfid"},
+        files={"file": ("RFID验证方案.txt", b"RFID", "text/plain")},
+    )
+    first_split = client.post(f"/api/test-items/split/{first_upload.json()['document']['id']}", headers=headers)
+    first_item_id = first_split.json()["items"][0]["id"]
+    client.post(f"/api/test-items/{first_item_id}/confirm", headers=headers)
+
+    second_upload = client.post(
+        "/api/documents/upload",
+        headers=headers,
+        data={"project_id": "project-g99-rfid"},
+        files={"file": ("RFID补充验证方案.txt", b"RFID", "text/plain")},
+    )
+    second_split = client.post(f"/api/test-items/split/{second_upload.json()['document']['id']}", headers=headers)
+    second_item_id = second_split.json()["items"][1]["id"]
+
+    response = client.post(f"/api/test-items/{second_item_id}/confirm", headers=headers)
+
+    assert response.status_code == 200
+    assert len(TEST_PACKAGES) == 1
+    package = next(iter(TEST_PACKAGES.values()))
+    assert {item.test_item_id for item in package.items} == {first_item_id, second_item_id}
 
 
 def test_update_test_item_allows_engineer_corrections() -> None:
@@ -314,6 +347,8 @@ def test_bulk_publish_test_items() -> None:
     remaining = client.get("/api/test-items", headers=headers)
     statuses = {item["id"]: item["status"] for item in remaining.json()}
     assert {statuses[item_id] for item_id in item_ids} == {"published"}
+    assert len(TEST_PACKAGES) == 1
+    assert {item.test_item_id for item in next(iter(TEST_PACKAGES.values())).items} == set(item_ids)
 
 
 def test_split_document_uses_ai_items(monkeypatch) -> None:

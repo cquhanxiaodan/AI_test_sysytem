@@ -276,7 +276,7 @@ def test_publish_validation_plan_auto_generates_test_assets() -> None:
 
     assert response.status_code == 200
     assert len(TEST_ITEMS) == 5
-    assert len(TEST_PACKAGES) == 1
+    assert len(TEST_PACKAGES) == 0
 
 
 def test_published_document_label_update_reruns_asset_pipeline() -> None:
@@ -302,7 +302,7 @@ def test_published_document_label_update_reruns_asset_pipeline() -> None:
     assert response.status_code == 200
     assert response.json()["status"] == "published"
     assert len(TEST_ITEMS) == 5
-    assert len(TEST_PACKAGES) == 1
+    assert len(TEST_PACKAGES) == 0
 
 
 def test_publish_validation_plan_infers_type_from_filename() -> None:
@@ -319,7 +319,7 @@ def test_publish_validation_plan_infers_type_from_filename() -> None:
 
     assert response.status_code == 200
     assert len(TEST_ITEMS) == 5
-    assert len(TEST_PACKAGES) == 1
+    assert len(TEST_PACKAGES) == 0
 
 
 def test_publish_jira_document_auto_parses_risks() -> None:

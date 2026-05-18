@@ -33,7 +33,6 @@ from app.modules.parsing.service import run_label_extraction_task, run_parse_tas
 from app.modules.projects.service import get_project_for_user
 from app.modules.risks.service import parse_risks
 from app.modules.test_items.service import split_document_to_items
-from app.modules.test_packages.service import generate_rfid_supplier_change_package
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 RUNTIME_IMPORT_CONFIG: dict[str, str] = {}
@@ -232,8 +231,6 @@ def run_published_document_pipeline(document: DocumentRead) -> None:
     run_parse_task(document.id)
     if document_type in {"验证方案", "测试规范", "测试报告"}:
         split_document_to_items(document.id, use_ai=False)
-        if document_has_rfid_module(document):
-            generate_rfid_supplier_change_package(document.project_id)
 
 
 def decode_content(content: bytes) -> str:
@@ -263,8 +260,3 @@ def infer_document_type(document: DocumentRead) -> str:
         return "验证方案"
     return ""
 
-
-def document_has_rfid_module(document: DocumentRead) -> bool:
-    if document.labels.get("module") == "RFID" or document.labels.get("test_object") == "RFID":
-        return True
-    return any(suggestion.label_value == "RFID" and suggestion.label_key in {"module", "test_object"} for suggestion in document.label_suggestions)

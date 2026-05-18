@@ -77,6 +77,76 @@ def generate_rfid_supplier_change_package(project_id: str) -> TestPackageAsset:
     return package
 
 
+def assign_item_to_package(item) -> TestPackageAsset:
+    package_name = package_name_for_item(item)
+    package = find_suitable_package_for_item(item, package_name)
+    package_item = TestPackageItem(
+        test_item_id=item.id,
+        title=item.title,
+        relation_type=relation_type_for_title(item.title),
+        trigger_condition="涉及供应商、结构、标签材料或整机 EMC 风险变化时触发" if "安规" in item.title else None,
+    )
+    if package is None:
+        package = create_package_for_item(item, package_name, package_item)
+    else:
+        package = package.model_copy(update={"items": upsert_package_item(package.items, package_item)})
+    _save_package(package)
+    return package
+
+
+def package_name_for_item(item) -> str:
+    if is_rfid_related_item(item):
+        return RFID_SUPPLIER_PACKAGE_NAME
+    test_object = item.test_object or item.primary_subsystem or "待确认对象"
+    return f"{test_object} 变更验证包"
+
+
+def find_suitable_package_for_item(item, package_name: str) -> TestPackageAsset | None:
+    test_object = "RFID" if is_rfid_related_item(item) else (item.test_object or item.primary_subsystem or "待确认对象")
+    change_type = "供应商变更" if "供应商变更" in item.risk_tags or is_rfid_related_item(item) else "变更验证"
+    return next(
+        (
+            package
+            for package in list_packages(item.project_id)
+            if package.test_object == test_object and package.change_type == change_type
+        ),
+        None,
+    ) or find_package_by_project_and_name(item.project_id, package_name)
+
+
+def create_package_for_item(item, package_name: str, package_item: TestPackageItem) -> TestPackageAsset:
+    test_object = "RFID" if is_rfid_related_item(item) else (item.test_object or item.primary_subsystem or "待确认对象")
+    change_type = "供应商变更" if "供应商变更" in item.risk_tags or is_rfid_related_item(item) else "变更验证"
+    return TestPackageAsset(
+        id=f"pkg-{uuid4()}",
+        project_id=item.project_id,
+        name=package_name,
+        package_type="变更归口",
+        test_object=test_object,
+        change_type=change_type,
+        applicable_scope=f"{test_object} {change_type}相关测试条目归口",
+        items=[package_item],
+        recommendation_level="high" if is_rfid_related_item(item) else "medium",
+        status="draft",
+        evidence="由已发布测试条目自动归并生成。",
+        created_at=datetime.now(UTC),
+    )
+
+
+def upsert_package_item(items: list[TestPackageItem], package_item: TestPackageItem) -> list[TestPackageItem]:
+    updated: list[TestPackageItem] = []
+    replaced = False
+    for item in items:
+        if item.test_item_id == package_item.test_item_id:
+            updated.append(package_item)
+            replaced = True
+        else:
+            updated.append(item)
+    if not replaced:
+        updated.append(package_item)
+    return updated
+
+
 def find_package_by_project_and_name(project_id: str, name: str) -> TestPackageAsset | None:
     normalized_name = normalize_package_name(name)
     return next((package for package in list_packages(project_id) if normalize_package_name(package.name) == normalized_name), None)
