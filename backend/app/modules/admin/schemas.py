@@ -26,6 +26,8 @@ class SystemSettingsFile(BaseModel):
     system_config: SystemConfig
     ai_config: AiSettingsConfig = Field(default_factory=AiSettingsConfig)
     document_import_directory: str = ""
+    user_ai_configs: dict[str, AiSettingsConfig] = Field(default_factory=dict)
+    user_document_import_directories: dict[str, str] = Field(default_factory=dict)
 
 
 class SystemConfigUpdate(BaseModel):

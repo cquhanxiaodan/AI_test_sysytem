@@ -10,12 +10,12 @@ router = APIRouter(prefix="/ai", tags=["ai"])
 
 @router.get("/config", response_model=AiConfigRead)
 def config(current_user: SeedUser = Depends(get_current_user)) -> AiConfigRead:
-    return get_ai_config()
+    return get_ai_config(current_user.id)
 
 
 @router.put("/config", response_model=AiConfigRead)
 def update_config(payload: AiConfigUpdate, current_user: SeedUser = Depends(get_current_user)) -> AiConfigRead:
-    return update_ai_config(payload)
+    return update_ai_config(payload, current_user.id)
 
 
 @router.post("/validate", response_model=AiValidationResponse)

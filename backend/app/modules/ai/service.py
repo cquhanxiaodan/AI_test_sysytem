@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from contextvars import ContextVar
 import json
 from typing import Any
 from urllib import error, request
@@ -15,6 +16,8 @@ from app.modules.ai.schemas import AiConfigRead, AiConfigUpdate, AiRunRecord, Ai
 
 AI_RUNS: dict[str, AiRunRecord] = {}
 RUNTIME_AI_CONFIG: dict[str, Any] = {}
+RUNTIME_USER_AI_CONFIGS: dict[str, dict[str, Any]] = {}
+CURRENT_AI_USER_ID: ContextVar[str | None] = ContextVar("current_ai_user_id", default=None)
 
 
 class AiRunRecordModel(Base):
@@ -51,8 +54,8 @@ def validate_output(task_type: str, output: dict[str, Any]) -> tuple[bool, list[
     return len(errors) == 0, errors
 
 
-def get_ai_config() -> AiConfigRead:
-    provider, base_url, api_key, model, timeout_seconds = get_ai_runtime_values()
+def get_ai_config(user_id: str | None = None) -> AiConfigRead:
+    provider, base_url, api_key, model, timeout_seconds = get_ai_runtime_values(user_id)
     configured = provider == "openai-compatible" and bool(base_url and api_key and model)
     return AiConfigRead(
         provider=provider,
@@ -66,11 +69,12 @@ def get_ai_config() -> AiConfigRead:
     )
 
 
-def update_ai_config(payload: AiConfigUpdate) -> AiConfigRead:
+def update_ai_config(payload: AiConfigUpdate, user_id: str | None = None) -> AiConfigRead:
     provider = payload.provider if payload.provider in {"local", "openai-compatible"} else "local"
-    current_provider, current_base_url, current_api_key, current_model, current_timeout = get_ai_runtime_values()
+    current_provider, current_base_url, current_api_key, current_model, current_timeout = get_ai_runtime_values(user_id)
     timeout_seconds = payload.timeout_seconds if payload.timeout_seconds > 0 else current_timeout
-    RUNTIME_AI_CONFIG.update(
+    runtime_config = RUNTIME_USER_AI_CONFIGS.setdefault(user_id, {}) if user_id else RUNTIME_AI_CONFIG
+    runtime_config.update(
         {
             "provider": provider,
             "base_url": payload.base_url.strip(),
@@ -79,31 +83,35 @@ def update_ai_config(payload: AiConfigUpdate) -> AiConfigRead:
         }
     )
     if payload.api_key.strip():
-        RUNTIME_AI_CONFIG["api_key"] = payload.api_key.strip()
-    elif "api_key" not in RUNTIME_AI_CONFIG and current_api_key:
-        RUNTIME_AI_CONFIG["api_key"] = current_api_key
+        runtime_config["api_key"] = payload.api_key.strip()
+    elif "api_key" not in runtime_config and current_api_key:
+        runtime_config["api_key"] = current_api_key
     if provider == "local":
-        RUNTIME_AI_CONFIG.update({"base_url": "", "model": "", "api_key": ""})
+        runtime_config.update({"base_url": "", "model": "", "api_key": ""})
     save_ai_settings(
         AiSettingsConfig(
-            provider=str(RUNTIME_AI_CONFIG.get("provider", provider)),
-            base_url=str(RUNTIME_AI_CONFIG.get("base_url", "")),
-            api_key=str(RUNTIME_AI_CONFIG.get("api_key", "")),
-            model=str(RUNTIME_AI_CONFIG.get("model", "")),
-            timeout_seconds=int(RUNTIME_AI_CONFIG.get("timeout_seconds", timeout_seconds)),
-        )
+            provider=str(runtime_config.get("provider", provider)),
+            base_url=str(runtime_config.get("base_url", "")),
+            api_key=str(runtime_config.get("api_key", "")),
+            model=str(runtime_config.get("model", "")),
+            timeout_seconds=int(runtime_config.get("timeout_seconds", timeout_seconds)),
+        ),
+        user_id=user_id,
     )
-    return get_ai_config()
+    return get_ai_config(user_id)
 
 
-def get_ai_runtime_values() -> tuple[str, str, str, str, int]:
-    persisted = get_persisted_ai_config()
+def get_ai_runtime_values(user_id: str | None = None) -> tuple[str, str, str, str, int]:
+    if user_id is None:
+        user_id = CURRENT_AI_USER_ID.get()
+    persisted = get_persisted_ai_config(user_id)
+    runtime_config = RUNTIME_USER_AI_CONFIGS.get(user_id, {}) if user_id else RUNTIME_AI_CONFIG
     return (
-        str(RUNTIME_AI_CONFIG.get("provider", persisted.provider)),
-        str(RUNTIME_AI_CONFIG.get("base_url", persisted.base_url)),
-        str(RUNTIME_AI_CONFIG.get("api_key", persisted.api_key)),
-        str(RUNTIME_AI_CONFIG.get("model", persisted.model)),
-        int(RUNTIME_AI_CONFIG.get("timeout_seconds", persisted.timeout_seconds)),
+        str(runtime_config.get("provider", persisted.provider)),
+        str(runtime_config.get("base_url", persisted.base_url)),
+        str(runtime_config.get("api_key", persisted.api_key)),
+        str(runtime_config.get("model", persisted.model)),
+        int(runtime_config.get("timeout_seconds", persisted.timeout_seconds)),
     )
 
 

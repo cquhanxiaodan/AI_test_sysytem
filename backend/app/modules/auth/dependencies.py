@@ -1,6 +1,7 @@
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
+from app.modules.ai.service import CURRENT_AI_USER_ID
 from app.modules.auth.seed_data import SeedUser
 from app.modules.auth.service import get_user_by_token
 
@@ -17,6 +18,7 @@ def get_current_user(
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
+    CURRENT_AI_USER_ID.set(user.id)
     return user
 
 

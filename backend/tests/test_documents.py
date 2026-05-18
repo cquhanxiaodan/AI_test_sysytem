@@ -130,14 +130,15 @@ def test_scan_import_directory_imports_new_files(tmp_path) -> None:
     assert set(second_scan.json()["skipped"]) == {"DNBSEQ-G99 RFID验证方案.txt", "jira-rfid.csv"}
 
 
-def test_tester_cannot_update_import_directory() -> None:
+def test_tester_can_update_personal_import_directory() -> None:
     response = client.put(
         "/api/documents/import-config",
         headers=auth_headers("tester", "tester123"),
         json={"import_directory": "/data/imports"},
     )
 
-    assert response.status_code == 403
+    assert response.status_code == 200
+    assert response.json() == {"import_directory": "/data/imports", "configured": True}
 
 
 def test_import_directory_persists_to_settings_file(tmp_path) -> None:
@@ -160,6 +161,37 @@ def test_import_directory_persists_to_settings_file(tmp_path) -> None:
 
     assert persisted.status_code == 200
     assert persisted.json() == {"import_directory": str(import_dir), "configured": True}
+
+
+def test_import_directory_is_scoped_to_current_user(tmp_path) -> None:
+    from app.modules.admin import service as admin_service
+    from app.modules.documents.router import RUNTIME_IMPORT_CONFIG
+
+    admin_service.get_settings().system_config_path = str(tmp_path / "system-config.json")
+    admin_dir = tmp_path / "admin-imports"
+    tester_dir = tmp_path / "tester-imports"
+    admin_dir.mkdir()
+    tester_dir.mkdir()
+
+    admin_response = client.put(
+        "/api/documents/import-config",
+        headers=auth_headers(),
+        json={"import_directory": str(admin_dir)},
+    )
+    tester_response = client.put(
+        "/api/documents/import-config",
+        headers=auth_headers("tester", "tester123"),
+        json={"import_directory": str(tester_dir)},
+    )
+    assert admin_response.status_code == 200
+    assert tester_response.status_code == 200
+
+    RUNTIME_IMPORT_CONFIG.clear()
+    admin_config = client.get("/api/documents/import-config", headers=auth_headers())
+    tester_config = client.get("/api/documents/import-config", headers=auth_headers("tester", "tester123"))
+
+    assert admin_config.json()["import_directory"] == str(admin_dir)
+    assert tester_config.json()["import_directory"] == str(tester_dir)
 
 
 def test_bulk_delete_removes_unpublished_documents() -> None:

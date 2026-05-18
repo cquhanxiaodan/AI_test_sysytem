@@ -83,7 +83,7 @@ async def upload_documents(
 
 @router.get("/import-config", response_model=DocumentImportConfigRead)
 def get_import_config(current_user: SeedUser = Depends(get_current_user)) -> DocumentImportConfigRead:
-    import_directory = get_import_directory()
+    import_directory = get_import_directory(current_user.id)
     return DocumentImportConfigRead(import_directory=import_directory, configured=bool(import_directory))
 
 
@@ -92,10 +92,8 @@ def update_import_config(
     payload: DocumentImportConfigUpdate,
     current_user: SeedUser = Depends(get_current_user),
 ) -> DocumentImportConfigRead:
-    if "admin" not in current_user.roles:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required")
-    RUNTIME_IMPORT_CONFIG["import_directory"] = payload.import_directory.strip()
-    save_import_directory(payload.import_directory)
+    RUNTIME_IMPORT_CONFIG[current_user.id] = payload.import_directory.strip()
+    save_import_directory(payload.import_directory, current_user.id)
     return get_import_config(current_user)
 
 
@@ -106,7 +104,7 @@ def scan_import_directory(
 ) -> DocumentDirectoryScanResponse:
     if get_project_for_user(project_id, current_user) is None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Project access denied")
-    import_directory = get_import_directory()
+    import_directory = get_import_directory(current_user.id)
     if not import_directory:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Import directory is not configured")
     base_path = Path(import_directory).expanduser().resolve()
@@ -172,8 +170,10 @@ def bulk_delete_documents(
     return DocumentBulkDeleteResponse(deleted_ids=deleted_ids, skipped=skipped)
 
 
-def get_import_directory() -> str:
-    return RUNTIME_IMPORT_CONFIG.get("import_directory", get_persisted_import_directory()).strip()
+def get_import_directory(user_id: str | None = None) -> str:
+    if user_id and user_id in RUNTIME_IMPORT_CONFIG:
+        return RUNTIME_IMPORT_CONFIG[user_id].strip()
+    return get_persisted_import_directory(user_id).strip()
 
 
 @router.get("/{document_id}", response_model=DocumentRead)
@@ -259,4 +259,3 @@ def infer_document_type(document: DocumentRead) -> str:
     if "方案" in document.filename or "validation" in filename:
         return "验证方案"
     return ""
-

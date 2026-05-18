@@ -4,7 +4,7 @@ from urllib import error
 from uuid import uuid4
 
 from app.main import app
-from app.modules.ai.service import AI_RUNS, RUNTIME_AI_CONFIG, run_json_task_detailed
+from app.modules.ai.service import AI_RUNS, RUNTIME_AI_CONFIG, RUNTIME_USER_AI_CONFIGS, run_json_task_detailed
 from app.modules.parsing.schemas import DocumentChunk
 from app.modules.parsing.service import CHUNKS
 from app.modules.risks.service import RISKS
@@ -21,6 +21,7 @@ def setup_function() -> None:
     admin_service.get_settings().repository_backend = "memory"
     admin_service.get_settings().system_config_path = f"/tmp/monkeycode-test-system-config-{uuid4()}.json"
     RUNTIME_AI_CONFIG.clear()
+    RUNTIME_USER_AI_CONFIGS.clear()
     AI_RUNS.clear()
     CHUNKS.clear()
     RISKS.clear()
@@ -178,6 +179,41 @@ def test_non_admin_can_update_ai_config() -> None:
     assert response.status_code == 200
     assert response.json()["configured"] is True
     assert response.json()["model"] == "tester-model"
+
+
+def test_ai_config_is_scoped_to_current_user(tmp_path) -> None:
+    from app.modules.admin import service as admin_service
+
+    admin_service.get_settings().system_config_path = str(tmp_path / "system-config.json")
+    RUNTIME_AI_CONFIG.clear()
+
+    admin_response = client.put(
+        "/api/ai/config",
+        headers=auth_headers(),
+        json={
+            "provider": "openai-compatible",
+            "base_url": "https://admin-model.example.com/v1",
+            "api_key": "admin-secret",
+            "model": "admin-model",
+            "timeout_seconds": 30,
+        },
+    )
+    tester_response = client.put(
+        "/api/ai/config",
+        headers=auth_headers("tester", "tester123"),
+        json={
+            "provider": "openai-compatible",
+            "base_url": "https://tester-model.example.com/v1",
+            "api_key": "tester-secret",
+            "model": "tester-model",
+            "timeout_seconds": 20,
+        },
+    )
+
+    assert admin_response.status_code == 200
+    assert tester_response.status_code == 200
+    assert client.get("/api/ai/config", headers=auth_headers()).json()["model"] == "admin-model"
+    assert client.get("/api/ai/config", headers=auth_headers("tester", "tester123")).json()["model"] == "tester-model"
 
 
 def test_ai_json_task_retries_without_response_format_on_502(monkeypatch) -> None:

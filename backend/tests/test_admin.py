@@ -108,16 +108,16 @@ def test_saving_system_config_preserves_other_settings(tmp_path) -> None:
     from app.modules.admin.schemas import AiSettingsConfig
 
     service.get_settings().system_config_path = str(tmp_path / "system-config.json")
-    service.save_ai_settings(AiSettingsConfig(provider="openai-compatible", base_url="https://model.example.com/v1", api_key="secret", model="model-a", timeout_seconds=25))
-    service.save_import_directory("/data/imports")
+    service.save_ai_settings(AiSettingsConfig(provider="openai-compatible", base_url="https://model.example.com/v1", api_key="secret", model="model-a", timeout_seconds=25), "user-admin")
+    service.save_import_directory("/data/imports", "user-admin")
 
     response = client.put("/api/admin/config", headers=auth_headers(), json={"test_types": ["保留验证类型"]})
 
     assert response.status_code == 200
     settings_file = service.load_settings_file()
     assert settings_file is not None
-    assert settings_file.ai_config.model == "model-a"
-    assert settings_file.document_import_directory == "/data/imports"
+    assert settings_file.user_ai_configs["user-admin"].model == "model-a"
+    assert settings_file.user_document_import_directories["user-admin"] == "/data/imports"
 
 
 def test_memory_system_config_can_restore_backup(tmp_path) -> None:

@@ -13,6 +13,7 @@ import {
   updateDocumentImportConfig,
   updateSystemConfig,
 } from "../api/client";
+import { useAuth } from "../context/AuthContext";
 
 type AiSettingsForm = {
   provider: string;
@@ -39,6 +40,7 @@ const SECTION_ALIAS_LABELS: Record<string, string> = {
 };
 
 export default function SettingsPage() {
+  const { user } = useAuth();
   const [form] = Form.useForm<AiSettingsForm>();
   const [documentImportForm] = Form.useForm<DocumentImportForm>();
   const [dictionaryForm] = Form.useForm<DictionaryForm>();
@@ -51,6 +53,7 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [savingDocumentImport, setSavingDocumentImport] = useState(false);
   const [savingDictionaries, setSavingDictionaries] = useState(false);
+  const isAdmin = user?.roles.includes("admin") ?? false;
 
   function loadConfig() {
     setLoading(true);
@@ -171,7 +174,7 @@ export default function SettingsPage() {
     <section>
       <Typography.Title level={2}>系统设置</Typography.Title>
       <Typography.Paragraph type="secondary">
-        管理 AI 模型网关配置。所有登录用户都可以配置并调用 AI；配置保存后会立即用于当前后端进程内的标签识别、条目拆分、风险解析、需求分析和方案检查。
+        管理当前账号的 AI 模型网关和资料导入目录。系统字典由管理员统一维护，普通用户使用管理员发布的全局选项。
       </Typography.Paragraph>
 
       <Card title="AI 模型状态" className="section-card" loading={loading}>
@@ -190,6 +193,9 @@ export default function SettingsPage() {
       </Card>
 
       <Card title="AI 模型配置" className="section-card">
+        <Typography.Paragraph type="secondary">
+          AI 模型配置按当前账号保存，保存后用于当前账号发起的 AI 调用。
+        </Typography.Paragraph>
         <Form form={form} layout="vertical" onFinish={save} initialValues={{ provider: "local", timeout_seconds: 20 }}>
           <Form.Item name="provider" label="模型提供方" rules={[{ required: true, message: "请选择模型提供方" }]}>
             <Select
@@ -220,7 +226,7 @@ export default function SettingsPage() {
 
       <Card title="统一资料池导入目录" className="section-card">
         <Typography.Paragraph type="secondary">
-          配置后端服务器上的资料目录。统一资料池页面点击扫描新增资料时，会读取该目录下普通文件并按 hash 去重导入。
+          资料导入目录按当前账号保存。统一资料池页面点击扫描新增资料时，会读取当前账号配置目录下的普通文件并按 hash 去重导入。
         </Typography.Paragraph>
         {documentImportConfig && (
           <Descriptions column={1} size="small" className="section-card">
@@ -231,7 +237,7 @@ export default function SettingsPage() {
           </Descriptions>
         )}
         <Form form={documentImportForm} layout="vertical" onFinish={saveDocumentImport}>
-          <Form.Item name="import_directory" label="服务器资料导入目录" extra="示例：/data/gene-test-imports。该路径需要后端服务进程可读取。">
+          <Form.Item name="import_directory" label="个人资料导入目录" extra="示例：/data/gene-test-imports。该路径需要后端服务进程可读取。">
             <Input placeholder="/data/gene-test-imports" />
           </Form.Item>
           <Space>
@@ -241,9 +247,9 @@ export default function SettingsPage() {
         </Form>
       </Card>
 
-      <Card title="系统字典配置" className="section-card">
+      <Card title={isAdmin ? "系统字典配置" : "系统字典"} className="section-card">
         <Typography.Paragraph type="secondary">
-          管理测试资产、资料标签和需求分析中使用的可选项。保存后，测试资产编辑弹窗会使用最新选项。
+          {isAdmin ? "管理测试资产、资料标签和需求分析中使用的全局可选项。保存后，测试资产编辑弹窗会使用最新选项。" : "测试资产、资料标签和需求分析使用管理员维护的全局可选项。"}
         </Typography.Paragraph>
         {systemConfig && (
           <Descriptions column={1} size="small" className="section-card">
@@ -253,34 +259,38 @@ export default function SettingsPage() {
             <Descriptions.Item label="当前测试类型">{systemConfig.test_types.join("、")}</Descriptions.Item>
           </Descriptions>
         )}
-        <Form form={dictionaryForm} layout="vertical" onFinish={saveDictionaries}>
-          <Form.Item name="subsystem_catalog" label="子系统目录" extra="用于测试资产的主子系统和关联子系统选项。">
-            <Select mode="tags" tokenSeparators={[",", "，"]} placeholder="输入后回车添加，例如 RFID" />
-          </Form.Item>
-          <Form.Item label="子系统-模块联动字典" extra="每个子系统维护独立模块选项，资料标签和测试条目编辑会按子系统联动展示。">
-            <SubsystemModuleEditor subsystems={dictionaryForm.getFieldValue("subsystem_catalog") || systemConfig?.subsystem_catalog || []} value={subsystemModules} onChange={setSubsystemModules} />
-          </Form.Item>
-          <Form.Item name="test_levels" label="测试层级">
-            <Select mode="tags" tokenSeparators={[",", "，"]} placeholder="输入后回车添加，例如 子系统级" />
-          </Form.Item>
-          <Form.Item name="test_types" label="测试类型">
-            <Select mode="tags" tokenSeparators={[",", "，"]} placeholder="输入后回车添加，例如 功能测试" />
-          </Form.Item>
-          <Form.Item name="document_types" label="资料类型">
-            <Select mode="tags" tokenSeparators={[",", "，"]} placeholder="输入后回车添加，例如 验证方案" />
-          </Form.Item>
-          <Form.Item name="change_types" label="变更类型">
-            <Select mode="tags" tokenSeparators={[",", "，"]} placeholder="输入后回车添加，例如 供应商变更" />
-          </Form.Item>
-          <Form.Item label="测试条目模板适配" extra="维护不同验证方案/测试规范中的段落别名。每个字段对应一个规范段落，输入后回车添加。">
-            <SectionAliasEditor value={templateSectionAliases} onChange={setTemplateSectionAliases} />
-          </Form.Item>
-          <Space>
-            <Button type="primary" htmlType="submit" loading={savingDictionaries}>保存系统字典</Button>
-            <Button onClick={restoreDictionaries} loading={savingDictionaries}>恢复上一版</Button>
-            <Button onClick={loadSystemConfig}>刷新字典</Button>
-          </Space>
-        </Form>
+        {isAdmin ? (
+          <Form form={dictionaryForm} layout="vertical" onFinish={saveDictionaries}>
+            <Form.Item name="subsystem_catalog" label="子系统目录" extra="用于测试资产的主子系统和关联子系统选项。">
+              <Select mode="tags" tokenSeparators={[",", "，"]} placeholder="输入后回车添加，例如 电子子系统" />
+            </Form.Item>
+            <Form.Item label="子系统-模块联动字典" extra="每个子系统维护独立模块选项，资料标签和测试条目编辑会按子系统联动展示。">
+              <SubsystemModuleEditor subsystems={dictionaryForm.getFieldValue("subsystem_catalog") || systemConfig?.subsystem_catalog || []} value={subsystemModules} onChange={setSubsystemModules} />
+            </Form.Item>
+            <Form.Item name="test_levels" label="测试层级">
+              <Select mode="tags" tokenSeparators={[",", "，"]} placeholder="输入后回车添加，例如 子系统级" />
+            </Form.Item>
+            <Form.Item name="test_types" label="测试类型">
+              <Select mode="tags" tokenSeparators={[",", "，"]} placeholder="输入后回车添加，例如 功能测试" />
+            </Form.Item>
+            <Form.Item name="document_types" label="资料类型">
+              <Select mode="tags" tokenSeparators={[",", "，"]} placeholder="输入后回车添加，例如 验证方案" />
+            </Form.Item>
+            <Form.Item name="change_types" label="变更类型">
+              <Select mode="tags" tokenSeparators={[",", "，"]} placeholder="输入后回车添加，例如 供应商变更" />
+            </Form.Item>
+            <Form.Item label="测试条目模板适配" extra="维护不同验证方案/测试规范中的段落别名。每个字段对应一个规范段落，输入后回车添加。">
+              <SectionAliasEditor value={templateSectionAliases} onChange={setTemplateSectionAliases} />
+            </Form.Item>
+            <Space>
+              <Button type="primary" htmlType="submit" loading={savingDictionaries}>保存系统字典</Button>
+              <Button onClick={restoreDictionaries} loading={savingDictionaries}>恢复上一版</Button>
+              <Button onClick={loadSystemConfig}>刷新字典</Button>
+            </Space>
+          </Form>
+        ) : (
+          <Button onClick={loadSystemConfig}>刷新字典</Button>
+        )}
       </Card>
     </section>
   );

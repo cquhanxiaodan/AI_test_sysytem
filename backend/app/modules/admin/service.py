@@ -133,7 +133,7 @@ def restore_config_backup() -> SystemConfig | None:
     return backup_file.system_config
 
 
-def get_persisted_ai_config() -> AiSettingsConfig:
+def get_persisted_ai_config(user_id: str | None = None) -> AiSettingsConfig:
     settings_file = load_settings_file()
     if settings_file is None:
         settings = get_settings()
@@ -144,22 +144,36 @@ def get_persisted_ai_config() -> AiSettingsConfig:
             model=settings.ai_model,
             timeout_seconds=settings.ai_timeout_seconds,
         )
+    if user_id and user_id in settings_file.user_ai_configs:
+        return settings_file.user_ai_configs[user_id]
     return settings_file.ai_config
 
 
-def save_ai_settings(config: AiSettingsConfig) -> None:
-    save_system_settings(ai_config=config)
+def save_ai_settings(config: AiSettingsConfig, user_id: str | None = None) -> None:
+    if not user_id:
+        save_system_settings(ai_config=config)
+        return
+    current = load_settings_file() or SystemSettingsFile(system_config=CONFIG)
+    user_ai_configs = {**current.user_ai_configs, user_id: config}
+    save_settings_file(current.model_copy(update={"user_ai_configs": user_ai_configs}))
 
 
-def get_persisted_import_directory() -> str:
+def get_persisted_import_directory(user_id: str | None = None) -> str:
     settings_file = load_settings_file()
     if settings_file is None:
         return get_settings().document_import_directory.strip()
+    if user_id and user_id in settings_file.user_document_import_directories:
+        return settings_file.user_document_import_directories[user_id].strip()
     return settings_file.document_import_directory.strip()
 
 
-def save_import_directory(import_directory: str) -> None:
-    save_system_settings(document_import_directory=import_directory.strip())
+def save_import_directory(import_directory: str, user_id: str | None = None) -> None:
+    if not user_id:
+        save_system_settings(document_import_directory=import_directory.strip())
+        return
+    current = load_settings_file() or SystemSettingsFile(system_config=CONFIG)
+    user_directories = {**current.user_document_import_directories, user_id: import_directory.strip()}
+    save_settings_file(current.model_copy(update={"user_document_import_directories": user_directories}))
 
 
 def save_system_settings(
