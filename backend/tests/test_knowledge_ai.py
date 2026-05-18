@@ -36,11 +36,12 @@ def auth_headers(username: str = "admin", password: str = "admin123") -> dict[st
 
 def test_knowledge_search_returns_project_scoped_results() -> None:
     headers = auth_headers()
-    client.post(
+    risks = client.post(
         "/api/risks/parse",
         headers=headers,
         json={"project_id": "project-g99-rfid", "source_type": "jira", "content": "title\nRFID读取失败\n"},
-    )
+    ).json()["items"]
+    client.post("/api/risks/bulk-publish", headers=headers, json={"risk_ids": [item["id"] for item in risks]})
 
     response = client.post(
         "/api/knowledge/search",
@@ -221,11 +222,12 @@ def test_ai_json_task_retries_without_response_format_on_502(monkeypatch) -> Non
 
 def test_free_chat_returns_local_knowledge_answer() -> None:
     headers = auth_headers()
-    client.post(
+    risks = client.post(
         "/api/risks/parse",
         headers=headers,
         json={"project_id": "project-g99-rfid", "source_type": "jira", "content": "title\nRFID读取失败\n"},
-    )
+    ).json()["items"]
+    client.post("/api/risks/bulk-publish", headers=headers, json={"risk_ids": [item["id"] for item in risks]})
 
     response = client.post(
         "/api/free-chat/ask",
@@ -242,11 +244,12 @@ def test_free_chat_returns_local_knowledge_answer() -> None:
 
 def test_free_chat_uses_conversation_history_for_follow_up() -> None:
     headers = auth_headers()
-    client.post(
+    risks = client.post(
         "/api/risks/parse",
         headers=headers,
         json={"project_id": "project-g99-rfid", "source_type": "jira", "content": "title\nRFID读取失败\n"},
-    )
+    ).json()["items"]
+    client.post("/api/risks/bulk-publish", headers=headers, json={"risk_ids": [item["id"] for item in risks]})
 
     response = client.post(
         "/api/free-chat/ask",

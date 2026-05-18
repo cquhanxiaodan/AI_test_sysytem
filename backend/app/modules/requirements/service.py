@@ -414,6 +414,8 @@ def build_local_recommendations(project_id: str, parse_result: RequirementParseR
             )
 
     for risk in list_risks(project_id=project_id, subsystem=parse_result.subsystem):
+            if risk.status != "published":
+                continue
             recommendations.append(
                 RequirementRecommendation(
                     id=f"rec-{uuid4()}",

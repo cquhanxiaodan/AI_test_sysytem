@@ -49,11 +49,12 @@ def seed_assets(headers: dict[str, str]) -> None:
     client.post(f"/api/test-items/split/{document_id}", headers=headers)
     package = client.post("/api/test-packages/generate-rfid-supplier-change?project_id=project-g99-rfid", headers=headers).json()
     client.post(f"/api/test-packages/{package['id']}/publish", headers=headers)
-    client.post(
+    risks = client.post(
         "/api/risks/parse",
         headers=headers,
         json={"project_id": "project-g99-rfid", "source_type": "jira", "content": "title\nRFID读取失败\n"},
-    )
+    ).json()["items"]
+    client.post("/api/risks/bulk-publish", headers=headers, json={"risk_ids": [item["id"] for item in risks]})
 
 
 def test_requirement_analysis_recommends_rfid_package_and_risks() -> None:
@@ -84,11 +85,11 @@ def test_requirement_analysis_uses_only_published_test_assets() -> None:
     document_id = upload.json()["document"]["id"]
     client.post(f"/api/test-items/split/{document_id}", headers=headers)
     client.post("/api/test-packages/generate-rfid-supplier-change?project_id=project-g99-rfid", headers=headers)
-    client.post(
+    risks = client.post(
         "/api/risks/parse",
         headers=headers,
         json={"project_id": "project-g99-rfid", "source_type": "jira", "content": "title\nRFID读取失败\n"},
-    )
+    ).json()["items"]
 
     draft_result = client.post(
         "/api/requirement-analyses/local",
@@ -109,8 +110,17 @@ def test_requirement_analysis_uses_only_published_test_assets() -> None:
     published_sources = {item["source_type"] for item in published_result.json()["recommendations"]}
     assert "test_package" not in draft_sources
     assert "test_item" not in draft_sources
-    assert "risk" in draft_sources
+    assert "risk" not in draft_sources
     assert "test_package" in published_sources
+
+    client.post("/api/risks/bulk-publish", headers=headers, json={"risk_ids": [item["id"] for item in risks]})
+    published_risk_result = client.post(
+        "/api/requirement-analyses/local",
+        headers=headers,
+        json={"project_id": "project-g99-rfid", "description": "DNBSEQ-G99 引入二供供应商康奈特 RFID"},
+    )
+    published_risk_groups = {item["group"] for item in published_risk_result.json()["recommendations"]}
+    assert "风险补充" in published_risk_groups
 
 
 def test_latest_requirement_analysis_returns_project_latest() -> None:

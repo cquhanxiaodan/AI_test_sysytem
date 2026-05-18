@@ -21,6 +21,8 @@ def search_project_knowledge(project_id: str, query: str) -> list[SearchResult]:
         candidates.append(SearchResult(source_type="test_package", source_id=package.id, title=package.name, text=text, score=score_text(text, terms)))
 
     for risk in list_risks(project_id=project_id):
+        if risk.status != "published":
+            continue
         text = " ".join([risk.title, risk.description, risk.suggested_test])
         candidates.append(SearchResult(source_type="risk", source_id=risk.id, title=risk.title, text=text, score=score_text(text, terms)))
 

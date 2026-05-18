@@ -53,11 +53,12 @@ def seed_assets(headers: dict[str, str]) -> None:
     client.post(f"/api/test-items/split/{document_id}", headers=headers)
     package = client.post("/api/test-packages/generate-rfid-supplier-change?project_id=project-g99-rfid", headers=headers).json()
     client.post(f"/api/test-packages/{package['id']}/publish", headers=headers)
-    client.post(
+    risks = client.post(
         "/api/risks/parse",
         headers=headers,
         json={"project_id": "project-g99-rfid", "source_type": "jira", "content": "title\nRFID读取失败\n"},
-    )
+    ).json()["items"]
+    client.post("/api/risks/bulk-publish", headers=headers, json={"risk_ids": [item["id"] for item in risks]})
 
 
 def create_analysis(headers: dict[str, str]) -> str:
