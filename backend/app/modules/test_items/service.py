@@ -391,6 +391,7 @@ def append_source_label_block(blocks: list[dict], label: str, lines: list[str]) 
                 ],
             }
         )
+        blocks.append({"type": "spacer"})
         blocks.append(
             {
                 "type": "table",

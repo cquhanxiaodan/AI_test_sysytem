@@ -94,6 +94,7 @@ def rewrite_test_item_section(output_path: Path, plan: ValidationPlanRead) -> No
         add_record_table(document, item.title, item.record_template)
         add_test_item_heading(document, item.sequence, 7, "需求符合性和BUG信息")
         add_compliance_table(document, item.title, item.compliance_bug_info)
+        document.add_paragraph("")
         add_bug_table(document)
     document.save(output_path)
 
@@ -191,6 +192,9 @@ def has_source_blocks(item) -> bool:
 
 def append_source_blocks(document: Document, blocks: list[dict]) -> None:
     for block in blocks:
+        if block.get("type") == "spacer":
+            document.add_paragraph("")
+            continue
         if block.get("type") == "table" and isinstance(block.get("rows"), list):
             add_source_table(document, block["rows"])
             continue

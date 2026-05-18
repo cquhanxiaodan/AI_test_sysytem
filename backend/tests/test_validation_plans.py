@@ -2,6 +2,8 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 from docx import Document
+from docx.table import Table
+from docx.text.paragraph import Paragraph
 
 from app.main import app
 from app.modules.documents.repository import DOCUMENTS
@@ -281,6 +283,12 @@ def test_validation_plan_export_renders_structured_tables() -> None:
     assert any("记录项目" in row and "判定标准" in row for row in table_rows)
     assert ("序号", "需求编号/DFMEA编号/风险管理编号", "需求描述", "测试结论", "备注") in table_headers
     assert ("序号", "问题描述", "涉及需求编号", "BUG编号（JIRA系统）", "RPN", "Bug解决状态") in table_headers
+    body_items = list(iter_document_body_items(document))
+    compliance_index = find_table_index(body_items, ("序号", "需求编号/DFMEA编号/风险管理编号", "需求描述", "测试结论", "备注"))
+    bug_index = find_table_index(body_items, ("序号", "问题描述", "涉及需求编号", "BUG编号（JIRA系统）", "RPN", "Bug解决状态"))
+    assert isinstance(body_items[compliance_index + 1], Paragraph)
+    assert body_items[compliance_index + 1].text == ""
+    assert compliance_index + 2 == bug_index
 
 
 def test_validation_plan_export_renders_top_level_tables() -> None:
@@ -350,6 +358,21 @@ RFID安装；
     assert "DNBSEQ-G99" in all_cells
     assert "RFID 标签" in all_cells
     assert "检验RFID结构适配安装至整机是否存在异常。" in paragraphs
+
+
+def iter_document_body_items(document: Document):
+    for child in document.element.body.iterchildren():
+        if child.tag.endswith("}p"):
+            yield Paragraph(child, document)
+        elif child.tag.endswith("}tbl"):
+            yield Table(child, document)
+
+
+def find_table_index(items: list, header: tuple[str, ...]) -> int:
+    for index, item in enumerate(items):
+        if isinstance(item, Table) and tuple(cell.text for cell in item.rows[0].cells) == header:
+            return index
+    raise AssertionError(f"table header not found: {header}")
 
 
 def test_validation_plan_status_can_be_updated_and_export_marks_exported() -> None:
