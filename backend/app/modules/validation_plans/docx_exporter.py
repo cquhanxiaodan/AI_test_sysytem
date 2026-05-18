@@ -82,7 +82,7 @@ def rewrite_test_item_section(output_path: Path, plan: ValidationPlanRead) -> No
         return
     remove_paragraphs_after(document, start_index)
     for item in plan.items:
-        document.add_heading(item.title, level=2)
+        reset_heading_indent(document.add_heading(item.title, level=2))
         if has_source_blocks(item):
             append_source_blocks(document, item.source_blocks)
             continue
@@ -231,7 +231,14 @@ def add_test_item_subsection(document: Document, sequence: int, subsection: int,
 
 
 def add_test_item_heading(document: Document, sequence: int, subsection: int, title: str) -> None:
-    document.add_heading(title, level=3)
+    reset_heading_indent(document.add_heading(title, level=3))
+
+
+def reset_heading_indent(paragraph) -> None:
+    paragraph.paragraph_format.left_indent = Pt(0)
+    paragraph.paragraph_format.first_line_indent = Pt(0)
+    paragraph.paragraph_format.right_indent = Pt(0)
+    reset_paragraph_indent_xml(paragraph)
 
 
 def add_tools_table(document: Document, tools: list[str]) -> None:

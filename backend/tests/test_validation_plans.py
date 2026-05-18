@@ -268,6 +268,12 @@ def test_validation_plan_export_uses_structured_test_item_headings() -> None:
     assert expected_title in heading_texts
     assert "需求符合性和BUG信息" in heading_texts
     assert all(not text.startswith("3.") for text in heading_texts)
+    for paragraph in document.paragraphs:
+        if paragraph.text in {expected_title, "测试工具", "测试记录", "需求符合性和BUG信息"}:
+            assert paragraph.paragraph_format.left_indent == Pt(0)
+            assert paragraph.paragraph_format.first_line_indent == Pt(0)
+            assert paragraph._p.pPr.ind.get(qn("w:leftChars")) == "0"
+            assert paragraph._p.pPr.ind.get(qn("w:firstLineChars")) == "0"
 
 
 def test_validation_plan_export_renders_structured_tables() -> None:
