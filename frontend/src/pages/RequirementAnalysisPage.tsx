@@ -258,7 +258,7 @@ export default function RequirementAnalysisPage() {
     const updated = await includeRequirementRecommendationInLocal(analysis.id, item.id);
     setAnalysis(updated);
     refreshAnalyses(updated);
-    message.success("已纳入本地测试条目资产，并自动确认用于测试方案");
+    message.success("已纳入本地测试条目资产草稿，发布后会自动归并归口包");
   }
 
   function statusTag(status: string) {

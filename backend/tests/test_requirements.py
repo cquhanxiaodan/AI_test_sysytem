@@ -406,12 +406,19 @@ def test_include_ai_recommendation_in_local_test_items(monkeypatch) -> None:
     assert included.status_code == 200
     updated = next(item for item in included.json()["recommendations"] if item["id"] == recommendation["id"])
     assert updated["source_type"] == "test_item"
-    assert updated["review_status"] == "confirmed"
+    assert updated["review_status"] == "pending"
     local_item = next(item for item in list_test_items("project-g99-rfid") if item.id == updated["source_id"])
     assert local_item.title == "新增 RFID 异常断电恢复测试"
-    assert local_item.status == "published"
+    assert local_item.source_type == "ai_generated"
+    assert local_item.status == "draft"
+    package = next(package for package in list_packages("project-g99-rfid") if package.name == "RFID测试归口包")
+    assert all(item.test_item_id != local_item.id for item in package.items)
+
+    published = client.post(f"/api/test-items/{local_item.id}/confirm", headers=headers)
+    assert published.status_code == 200
     package = next(package for package in list_packages("project-g99-rfid") if package.name == "RFID测试归口包")
     assert any(item.test_item_id == local_item.id for item in package.items)
+    assert len([package for package in list_packages("project-g99-rfid") if "RFID" in package.name]) == 1
 
 
 def test_include_ai_recommendation_reuses_existing_local_test_item(monkeypatch) -> None:

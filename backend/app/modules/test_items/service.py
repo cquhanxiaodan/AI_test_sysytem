@@ -45,6 +45,7 @@ class TestItemRecord(Base):
     id: Mapped[str] = mapped_column(String(80), primary_key=True)
     project_id: Mapped[str] = mapped_column(String(120), index=True)
     source_document_id: Mapped[str] = mapped_column(String(120), index=True)
+    source_type: Mapped[str] = mapped_column(String(80), default="document", index=True)
     title: Mapped[str] = mapped_column(String(500))
     test_object: Mapped[str] = mapped_column(String(120), index=True)
     primary_subsystem: Mapped[str] = mapped_column(String(120), index=True)
@@ -154,6 +155,7 @@ def split_items_with_ai(project_id: str, document_id: str, filename: str, text: 
                     id=f"item-{uuid4()}",
                     project_id=project_id,
                     source_document_id=document_id,
+                    source_type="document",
                     title=str(raw_item.get("title") or "资料来源测试条目"),
                     test_object=str(raw_item.get("test_object") or "待确认对象"),
                     primary_subsystem=normalize_subsystem(str(raw_item.get("primary_subsystem") or raw_item.get("subsystem") or infer_subsystem_from_title(str(raw_item.get("title") or "")))),
@@ -224,21 +226,29 @@ def create_item_from_fields(
     method: str,
     record_template: str,
     evidence: str,
+    source_type: str = "manual",
+    status: str = "draft",
 ) -> TestItemAsset:
     existing = find_test_item_by_title(project_id, title)
+    normalized_subsystem = normalize_subsystem(subsystem)
+    module = infer_module_from_text(title, test_object, subsystem, evidence)
+    if module == "RFID":
+        test_object = "RFID"
+        normalized_subsystem = normalize_subsystem("电子子系统")
     if existing is not None:
         updated = existing.model_copy(
             update={
                 "test_object": test_object,
-                "primary_subsystem": normalize_subsystem(subsystem),
-                "module": infer_module_from_title(title),
+                "primary_subsystem": normalized_subsystem,
+                "module": module,
                 "objective": objective,
                 "method": method,
                 "connection_media": "待补充",
                 "record_template": record_template,
                 "compliance_bug_info": "记录需求符合性结论和关联 BUG 信息。",
                 "evidence": evidence,
-                "status": "published",
+                "source_type": source_type,
+                "status": status,
             }
         )
         _save_item(updated)
@@ -247,10 +257,11 @@ def create_item_from_fields(
         id=f"item-{uuid4()}",
         project_id=project_id,
         source_document_id="ai-recommendation",
+        source_type=source_type,
         title=title,
         test_object=test_object,
-        primary_subsystem=normalize_subsystem(subsystem),
-        module=infer_module_from_text(title, evidence),
+        primary_subsystem=normalized_subsystem,
+        module=module,
         related_subsystems=[],
         test_level="待确认层级",
         test_type=infer_test_type(title),
@@ -264,7 +275,7 @@ def create_item_from_fields(
         compliance_bug_info="记录需求符合性结论和关联 BUG 信息。",
         source_section_text="",
         evidence=evidence,
-        status="published",
+        status=status,
         created_at=datetime.now(UTC),
     )
     _save_item(item)
@@ -437,6 +448,7 @@ def build_test_item(project_id: str, document_id: str, filename: str, title: str
         id=f"item-{uuid4()}",
         project_id=project_id,
         source_document_id=document_id,
+        source_type="document",
         title=title,
         test_object="RFID" if "RFID" in title else "待确认对象",
         primary_subsystem=normalize_subsystem(infer_subsystem_from_title(title)),
@@ -558,6 +570,7 @@ def _item_to_record(item: TestItemAsset) -> TestItemRecord:
         id=item.id,
         project_id=item.project_id,
         source_document_id=item.source_document_id,
+        source_type=item.source_type,
         title=item.title,
         test_object=item.test_object,
         primary_subsystem=item.primary_subsystem,
@@ -585,6 +598,7 @@ def _record_to_item(record: TestItemRecord) -> TestItemAsset:
         id=record.id,
         project_id=record.project_id,
         source_document_id=record.source_document_id,
+        source_type=getattr(record, "source_type", None) or ("ai_generated" if record.source_document_id == "ai-recommendation" else "document"),
         title=record.title,
         test_object=record.test_object,
         primary_subsystem=normalize_subsystem(record.primary_subsystem),

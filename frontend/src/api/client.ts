@@ -81,6 +81,7 @@ export type TestItemAsset = {
   id: string;
   project_id: string;
   source_document_id: string;
+  source_type: string;
   title: string;
   test_object: string;
   primary_subsystem: string;

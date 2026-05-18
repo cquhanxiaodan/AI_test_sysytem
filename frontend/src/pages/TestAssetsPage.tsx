@@ -250,6 +250,7 @@ export default function TestAssetsPage() {
 
   const columns: ColumnsType<TestItemAsset> = [
     { title: "测试条目", dataIndex: "title" },
+    { title: "来源", dataIndex: "source_type", render: (value) => <Tag color={value === "ai_generated" ? "purple" : "blue"}>{value === "ai_generated" ? "AI补充" : "资料解析"}</Tag> },
     { title: "所属项目", dataIndex: "project_id", render: (projectId) => projects.find((project) => project.id === projectId)?.name ?? projectId },
     { title: "对象", dataIndex: "test_object" },
     { title: "主子系统", dataIndex: "primary_subsystem" },

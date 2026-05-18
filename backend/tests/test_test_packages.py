@@ -4,7 +4,7 @@ from uuid import uuid4
 from app.main import app
 from app.modules.documents.repository import DOCUMENTS
 from app.modules.parsing.service import CHUNKS, TASKS
-from app.modules.test_items.service import TEST_ITEMS
+from app.modules.test_items.service import TEST_ITEMS, create_item_from_fields
 from app.modules.test_packages.service import TEST_PACKAGES
 
 
@@ -154,3 +154,32 @@ def test_bulk_publish_test_packages() -> None:
     assert set(response.json()["published_ids"]) == {first["id"], second["id"]}
     statuses = {package["id"]: package["status"] for package in client.get("/api/test-packages", headers=headers).json()}
     assert {statuses[first["id"]], statuses[second["id"]]} == {"published"}
+
+
+def test_publish_ai_generated_rfid_item_reuses_existing_rfid_package() -> None:
+    headers = auth_headers()
+    seed_rfid_items(headers)
+    package = client.post(
+        "/api/test-packages/generate-rfid-supplier-change?project_id=project-g99-rfid",
+        headers=headers,
+    ).json()
+    item = create_item_from_fields(
+        project_id="project-g99-rfid",
+        title="RFID 断电重启后读写恢复测试",
+        test_object="RFID",
+        subsystem="RFID",
+        objective="验证 RFID 断电重启后的读写恢复能力。",
+        method="执行断电重启后读取和写入 RFID。",
+        record_template="记录断电条件、恢复时间、读写结果和异常日志。",
+        evidence="AI 补充推荐",
+        source_type="ai_generated",
+        status="draft",
+    )
+
+    response = client.post(f"/api/test-items/{item.id}/confirm", headers=headers)
+
+    assert response.status_code == 200
+    packages = client.get("/api/test-packages?project_id=project-g99-rfid", headers=headers).json()
+    assert len(packages) == 1
+    assert packages[0]["id"] == package["id"]
+    assert any(package_item["test_item_id"] == item.id for package_item in packages[0]["items"])

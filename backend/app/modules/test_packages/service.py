@@ -112,7 +112,11 @@ def find_suitable_package_for_item(item, package_name: str) -> TestPackageAsset 
     test_object = module or subsystem
     packages = list_packages()
     if module:
-        matched = next((package for package in packages if package.module == module or package.test_object == module), None)
+        matched = next((package for package in packages if package.module == module or package.test_object == module or module in package.name), None)
+        if matched is not None:
+            return matched
+    if test_object == "RFID":
+        matched = next((package for package in packages if package.test_object == "RFID" or "RFID" in package.name), None)
         if matched is not None:
             return matched
     return next(

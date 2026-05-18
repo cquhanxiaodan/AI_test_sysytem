@@ -7,6 +7,7 @@ class TestItemAsset(BaseModel):
     id: str
     project_id: str
     source_document_id: str
+    source_type: str = "document"
     title: str
     test_object: str
     primary_subsystem: str
