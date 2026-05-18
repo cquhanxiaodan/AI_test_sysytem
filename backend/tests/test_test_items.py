@@ -209,6 +209,30 @@ DNBSEQ-G99
     assert item["compliance_bug_info"] == "失败时登记 BUG 并回归。"
 
 
+def test_split_document_uses_configured_test_types() -> None:
+    headers = auth_headers()
+    config_response = client.put(
+        "/api/admin/config",
+        headers=headers,
+        json={"test_types": ["配置功能测试", "配置装配兼容性", "配置安规 EMC"]},
+    )
+    assert config_response.status_code == 200
+    upload = client.post(
+        "/api/documents/upload",
+        headers=headers,
+        data={"project_id": "project-g99-rfid"},
+        files={"file": ("RFID验证方案.txt", b"RFID", "text/plain")},
+    )
+
+    response = client.post(f"/api/test-items/split/{upload.json()['document']['id']}", headers=headers)
+
+    assert response.status_code == 200
+    items = {item["title"]: item for item in response.json()["items"]}
+    assert items["RFID 在机读取测试"]["test_type"] == "配置功能测试"
+    assert items["RFID 在机装配测试"]["test_type"] == "配置装配兼容性"
+    assert items["安规 EMC 测试"]["test_type"] == "配置安规 EMC"
+
+
 def test_confirm_test_item_publishes_asset() -> None:
     headers = auth_headers()
     upload = client.post(
@@ -320,6 +344,33 @@ def test_update_test_item_allows_engineer_corrections() -> None:
     assert response.json()["test_type"] == "回归测试"
 
 
+def test_update_test_item_normalizes_unknown_test_type_to_config() -> None:
+    headers = auth_headers()
+    config_response = client.put(
+        "/api/admin/config",
+        headers=headers,
+        json={"test_types": ["配置功能测试", "配置回归测试"]},
+    )
+    assert config_response.status_code == 200
+    upload = client.post(
+        "/api/documents/upload",
+        headers=headers,
+        data={"project_id": "project-g99-rfid"},
+        files={"file": ("RFID验证方案.txt", b"RFID", "text/plain")},
+    )
+    split = client.post(f"/api/test-items/split/{upload.json()['document']['id']}", headers=headers)
+    item_id = split.json()["items"][0]["id"]
+
+    response = client.patch(
+        f"/api/test-items/{item_id}",
+        headers=headers,
+        json={"test_type": "手工未知类型"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["test_type"] == "配置功能测试"
+
+
 def test_update_published_test_item_returns_to_draft() -> None:
     headers = auth_headers()
     upload = client.post(
@@ -426,6 +477,7 @@ def test_split_document_uses_ai_items(monkeypatch) -> None:
     assert [item["title"] for item in response.json()["items"]] == ["AI RFID 异常恢复测试"]
     assert response.json()["items"][0]["primary_subsystem"] == "电子子系统"
     assert response.json()["items"][0]["module"] == "RFID"
+    assert response.json()["items"][0]["test_type"] == "功能测试"
 
 
 def test_test_item_list_is_global_when_project_filter_omitted() -> None:

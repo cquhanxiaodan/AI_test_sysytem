@@ -135,6 +135,7 @@ def split_items_with_ai(project_id: str, document_id: str, filename: str, text: 
             "从验证方案、测试规范或测试报告中拆分测试条目，输出 items 数组。"
             "每个条目包含 title、test_object、primary_subsystem、module、related_subsystems、test_level、test_type、risk_tags、objective、method、tools、steps、connection_media、record_template、compliance_bug_info、source_section_text、evidence。"
             f"primary_subsystem 必须从系统配置子系统字典中选择：{get_config().subsystem_catalog}。RFID 应作为 module，primary_subsystem 使用电子子系统。"
+            f"test_type 必须从系统配置测试类型字典中选择：{get_config().test_types}。"
             "优先按 3.x 测试项目拆分，保留测试项目原始 7 段内容，缺失字段使用待确认。"
             f"\n文件名：{filename}"
             f"\n本地候选：{[item.title for item in fallback_items]}"
@@ -159,7 +160,7 @@ def split_items_with_ai(project_id: str, document_id: str, filename: str, text: 
                     module=str(raw_item.get("module") or infer_module_from_title(str(raw_item.get("title") or ""))),
                     related_subsystems=[str(value) for value in raw_item.get("related_subsystems", []) if isinstance(value, str)],
                     test_level=str(raw_item.get("test_level") or "待确认层级"),
-                    test_type=str(raw_item.get("test_type") or "功能测试"),
+                    test_type=normalize_test_type(str(raw_item.get("test_type") or ""), str(raw_item.get("title") or "")),
                     risk_tags=[str(value) for value in raw_item.get("risk_tags", []) if isinstance(value, str)],
                     objective=str(raw_item.get("objective") or f"验证{raw_item.get('title')}满足需求。"),
                     method=str(raw_item.get("method") or "待测试工程师确认方法和标准。"),
@@ -199,6 +200,8 @@ def update_item(item_id: str, payload: TestItemUpdate) -> TestItemAsset | None:
         updates["primary_subsystem"] = normalize_subsystem(updates["primary_subsystem"])
     if "module" in updates and updates["module"] == "RFID":
         updates["primary_subsystem"] = normalize_subsystem("电子子系统")
+    if "test_type" in updates:
+        updates["test_type"] = normalize_test_type(updates["test_type"], updates.get("title", item.title))
     updated = item.model_copy(update={**updates, "status": "draft" if item.status != "draft" else item.status})
     _save_item(updated)
     return updated
@@ -484,17 +487,33 @@ def prefer_local_extracted_fields(item: TestItemAsset, filename: str, section: E
 
 
 def infer_test_type(title: str) -> str:
-    if "读取" in title:
-        return "功能-读取"
-    if "写入" in title:
-        return "功能-写入"
-    if "初始化" in title:
-        return "功能-初始化"
-    if "装配" in title:
-        return "装配兼容性"
-    if "安规" in title or "EMC" in title:
-        return "安规 EMC"
-    return "功能测试"
+    return normalize_test_type("", title)
+
+
+def normalize_test_type(value: str, title: str = "") -> str:
+    config = get_config()
+    candidates = config.test_types
+    if value in candidates:
+        return value
+    matched_value = next((candidate for candidate in candidates if value and (value in candidate or candidate in value)), None)
+    if matched_value:
+        return matched_value
+    keyword_map = [
+        ("读取", ["读取", "功能测试"]),
+        ("写入", ["写入", "功能测试"]),
+        ("初始化", ["初始化", "功能测试"]),
+        ("装配", ["装配兼容性"]),
+        ("安规", ["安规 EMC"]),
+        ("EMC", ["安规 EMC"]),
+    ]
+    for keyword, preferred_values in keyword_map:
+        if keyword in title:
+            for preferred in preferred_values:
+                matched = next((value for value in candidates if preferred in value), None)
+                if matched:
+                    return matched
+            break
+    return candidates[0] if candidates else "功能测试"
 
 
 def infer_module_from_title(title: str) -> str:
