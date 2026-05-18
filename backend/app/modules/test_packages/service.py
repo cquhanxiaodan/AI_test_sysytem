@@ -77,7 +77,7 @@ def generate_rfid_supplier_change_package(project_id: str) -> TestPackageAsset:
         evidence="由 RFID 验证方案拆分条目自动归并生成。",
         created_at=datetime.now(UTC),
     )
-    existing = find_package_by_project_and_name(project_id, RFID_SUPPLIER_PACKAGE_NAME)
+    existing = find_rfid_package_for_project(project_id)
     if existing is not None:
         package = package.model_copy(update={"id": existing.id, "status": existing.status, "created_at": existing.created_at})
     _save_package(package)
@@ -187,6 +187,18 @@ def find_package_by_name(name: str) -> TestPackageAsset | None:
 def find_package_by_project_and_name(project_id: str, name: str) -> TestPackageAsset | None:
     normalized_name = normalize_package_name(name)
     return next((package for package in list_packages(project_id) if normalize_package_name(package.name) == normalized_name), None)
+
+
+def find_rfid_package_for_project(project_id: str) -> TestPackageAsset | None:
+    packages = list_packages(project_id)
+    return next(
+        (
+            package
+            for package in packages
+            if package.module == "RFID" or package.test_object == "RFID" or "RFID" in package.name
+        ),
+        None,
+    )
 
 
 def normalize_package_name(name: str) -> str:

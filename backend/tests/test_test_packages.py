@@ -79,6 +79,31 @@ def test_generate_rfid_supplier_change_package_reuses_existing_package() -> None
     assert len(packages) == 1
 
 
+def test_generate_rfid_supplier_change_package_reuses_legacy_rfid_package_name() -> None:
+    headers = auth_headers()
+    seed_rfid_items(headers)
+    first = client.post(
+        "/api/test-packages/generate-rfid-supplier-change?project_id=project-g99-rfid",
+        headers=headers,
+    ).json()
+    renamed = client.patch(
+        f"/api/test-packages/{first['id']}",
+        headers=headers,
+        json={"name": "RFID测试包"},
+    ).json()
+    client.post(f"/api/test-packages/{renamed['id']}/publish", headers=headers)
+
+    second = client.post(
+        "/api/test-packages/generate-rfid-supplier-change?project_id=project-g99-rfid",
+        headers=headers,
+    )
+
+    assert second.status_code == 200
+    assert second.json()["id"] == first["id"]
+    packages = client.get("/api/test-packages?project_id=project-g99-rfid", headers=headers).json()
+    assert len(packages) == 1
+
+
 def test_generate_rfid_supplier_change_package_deduplicates_normalized_titles() -> None:
     headers = auth_headers()
     create_item_from_fields(
