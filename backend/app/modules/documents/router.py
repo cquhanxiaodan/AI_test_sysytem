@@ -197,6 +197,8 @@ def update_document_labels(
     updated = update_labels(document.id, payload.labels)
     if updated is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+    if updated.status == "published":
+        run_published_document_pipeline(updated)
     return updated
 
 
@@ -228,9 +230,8 @@ def run_published_document_pipeline(document: DocumentRead) -> None:
         return
 
     run_parse_task(document.id)
-    run_label_extraction_task(document.id)
     if document_type in {"验证方案", "测试规范", "测试报告"}:
-        split_document_to_items(document.id)
+        split_document_to_items(document.id, use_ai=False)
         if document_has_rfid_module(document):
             generate_rfid_supplier_change_package(document.project_id)
 

@@ -279,6 +279,32 @@ def test_publish_validation_plan_auto_generates_test_assets() -> None:
     assert len(TEST_PACKAGES) == 1
 
 
+def test_published_document_label_update_reruns_asset_pipeline() -> None:
+    headers = auth_headers()
+    upload = client.post(
+        "/api/documents/upload",
+        headers=headers,
+        data={"project_id": "project-g99-rfid"},
+        files={"file": ("DNBSEQ-G99 RFID验证方案.txt", b"RFID supplier change validation", "text/plain")},
+    )
+    document_id = upload.json()["document"]["id"]
+    publish = client.post(f"/api/documents/{document_id}/review", headers=headers, json={"action": "publish"})
+    assert publish.status_code == 200
+    TEST_ITEMS.clear()
+    TEST_PACKAGES.clear()
+
+    response = client.patch(
+        f"/api/documents/{document_id}/labels",
+        headers=headers,
+        json={"labels": {"product_model": "DNBSEQ-G99", "subsystem": "电子子系统", "module": "RFID", "document_type": "验证方案"}},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "published"
+    assert len(TEST_ITEMS) == 5
+    assert len(TEST_PACKAGES) == 1
+
+
 def test_publish_validation_plan_infers_type_from_filename() -> None:
     headers = auth_headers()
     upload = client.post(

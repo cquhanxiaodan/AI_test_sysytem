@@ -80,7 +80,7 @@ def list_test_items(project_id: str | None = None) -> list[TestItemAsset]:
     return sorted(items, key=lambda item: item.created_at, reverse=True)
 
 
-def split_document_to_items(document_id: str) -> SplitResult | None:
+def split_document_to_items(document_id: str, use_ai: bool = True) -> SplitResult | None:
     document = get_document(document_id)
     if document is None:
         return None
@@ -91,7 +91,8 @@ def split_document_to_items(document_id: str) -> SplitResult | None:
     titles = [section.title for section in extracted_sections] or infer_test_titles(text)
     section_by_title = {section.title: section for section in extracted_sections}
     items = [build_test_item(document.project_id, document_id, document.filename, title, section_by_title.get(title)) for title in titles]
-    items = split_items_with_ai(document.project_id, document_id, document.filename, text, items) or items
+    if use_ai:
+        items = split_items_with_ai(document.project_id, document_id, document.filename, text, items) or items
     items = [prefer_local_extracted_fields(item, document.filename, section_by_title.get(item.title)) for item in items]
     saved_items = upsert_split_items(document_id, items)
     return SplitResult(document_id=document_id, items=saved_items)
