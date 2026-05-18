@@ -32,7 +32,7 @@ class SystemConfigRecord(Base):
     value: Mapped[dict] = mapped_column(JSON)
 
 CONFIG = SystemConfig(
-    subsystem_catalog=["RFID", "液路系统", "光学系统", "温控系统", "运动控制", "整机系统"],
+    subsystem_catalog=["电子子系统", "液路系统", "光学系统", "温控系统", "运动控制", "整机系统"],
     document_types=["验证方案", "测试规范", "测试报告", "Jira导出", "DFMEA"],
     test_levels=["部件级", "子系统级", "系统级", "整机级", "回归验证"],
     test_types=["功能测试", "性能测试", "装配兼容性", "安规 EMC", "回归测试"],

@@ -12,6 +12,13 @@ client = TestClient(app)
 
 
 def setup_function() -> None:
+    from uuid import uuid4
+
+    from app.modules.admin import service as admin_service
+
+    admin_service.CONFIG = admin_service.DEFAULT_CONFIG.model_copy(deep=True)
+    admin_service.get_settings().repository_backend = "memory"
+    admin_service.get_settings().system_config_path = f"/tmp/monkeycode-test-system-config-{uuid4()}.json"
     DOCUMENTS.clear()
     TASKS.clear()
     CHUNKS.clear()
@@ -55,7 +62,8 @@ def test_label_extraction_updates_high_confidence_labels() -> None:
 
     document = client.get(f"/api/documents/{document_id}", headers=headers).json()
     assert document["labels"]["product_model"] == "DNBSEQ-G99"
-    assert document["labels"]["subsystem"] == "RFID"
+    assert document["labels"]["subsystem"] == "电子子系统"
+    assert document["labels"]["module"] == "RFID"
 
 
 def test_label_extraction_merges_ai_labels(monkeypatch) -> None:
@@ -72,6 +80,23 @@ def test_label_extraction_merges_ai_labels(monkeypatch) -> None:
     assert response.status_code == 200
     document = client.get(f"/api/documents/{document_id}", headers=headers).json()
     assert document["labels"]["change_type"] == "供应商变更"
+
+
+def test_label_extraction_normalizes_ai_rfid_subsystem(monkeypatch) -> None:
+    headers = auth_headers()
+    document_id = upload_demo(headers)
+
+    def fake_run_json_task(*args, **kwargs):
+        return {"labels": {"subsystem": "RFID", "change_type": "供应商变更"}, "confidence": 0.91, "evidence": "文件内容提到 RFID 验证"}
+
+    monkeypatch.setattr("app.modules.parsing.service.run_json_task", fake_run_json_task)
+
+    response = client.post(f"/api/parsing/documents/{document_id}/extract-labels", headers=headers)
+
+    assert response.status_code == 200
+    document = client.get(f"/api/documents/{document_id}", headers=headers).json()
+    assert document["labels"]["subsystem"] == "电子子系统"
+    assert document["labels"]["module"] == "RFID"
 
 
 def test_parse_docx_extracts_paragraphs_and_tables() -> None:

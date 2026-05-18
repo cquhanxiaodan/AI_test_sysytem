@@ -22,6 +22,7 @@ def setup_function() -> None:
     from app.modules.admin import service as admin_service
     from app.modules.documents.router import RUNTIME_IMPORT_CONFIG
 
+    admin_service.CONFIG = admin_service.DEFAULT_CONFIG.model_copy(deep=True)
     admin_service.get_settings().repository_backend = "memory"
     admin_service.get_settings().system_config_path = f"/tmp/monkeycode-test-system-config-{uuid4()}.json"
     RUNTIME_IMPORT_CONFIG.clear()
@@ -47,6 +48,32 @@ def test_upload_document_suggests_labels() -> None:
     assert document["storage_path"]
     assert get_document_content(document["id"]) == b"demo"
     assert {item["label_key"] for item in document["label_suggestions"]} >= {"product_model", "subsystem", "document_type"}
+    labels = {item["label_key"]: item["label_value"] for item in document["label_suggestions"]}
+    assert labels["subsystem"] == "电子子系统"
+    assert labels["module"] == "RFID"
+
+
+def test_document_label_suggestions_use_system_config_options() -> None:
+    headers = auth_headers()
+    config = client.put(
+        "/api/admin/config",
+        headers=headers,
+        json={"subsystem_catalog": ["电子子系统", "液路系统"], "change_types": ["供应商变更", "软件变更"]},
+    )
+    assert config.status_code == 200
+
+    response = client.post(
+        "/api/documents/upload",
+        headers=headers,
+        data={"project_id": "project-g99-rfid"},
+        files={"file": ("DNBSEQ-G99 康奈特RFID二供验证方案.docx", b"demo", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")},
+    )
+
+    assert response.status_code == 200
+    labels = {item["label_key"]: item["label_value"] for item in response.json()["document"]["label_suggestions"]}
+    assert labels["subsystem"] == "电子子系统"
+    assert labels["module"] == "RFID"
+    assert labels["change_type"] == "供应商变更"
 
 
 def test_batch_upload_documents() -> None:
@@ -174,7 +201,7 @@ def test_bulk_delete_allows_published_documents_for_flow_retest() -> None:
     client.patch(
         f"/api/documents/{document_id}/labels",
         headers=headers,
-        json={"labels": {"product_model": "DNBSEQ-G99", "subsystem": "RFID", "document_type": "验证方案"}},
+        json={"labels": {"product_model": "DNBSEQ-G99", "subsystem": "电子子系统", "module": "RFID", "document_type": "验证方案"}},
     )
     client.post(f"/api/documents/{document_id}/review", headers=headers, json={"action": "publish"})
 
@@ -203,7 +230,7 @@ def test_document_label_update_moves_to_review() -> None:
     response = client.patch(
         f"/api/documents/{document_id}/labels",
         headers=headers,
-        json={"labels": {"product_model": "DNBSEQ-G99", "subsystem": "RFID", "document_type": "验证方案"}},
+        json={"labels": {"product_model": "DNBSEQ-G99", "subsystem": "电子子系统", "module": "RFID", "document_type": "验证方案"}},
     )
 
     assert response.status_code == 200
@@ -242,7 +269,7 @@ def test_publish_validation_plan_auto_generates_test_assets() -> None:
     client.patch(
         f"/api/documents/{document_id}/labels",
         headers=headers,
-        json={"labels": {"product_model": "DNBSEQ-G99", "subsystem": "RFID", "document_type": "验证方案"}},
+        json={"labels": {"product_model": "DNBSEQ-G99", "subsystem": "电子子系统", "module": "RFID", "document_type": "验证方案"}},
     )
 
     response = client.post(f"/api/documents/{document_id}/review", headers=headers, json={"action": "publish"})

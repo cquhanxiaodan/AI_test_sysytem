@@ -231,7 +231,7 @@ def run_published_document_pipeline(document: DocumentRead) -> None:
     run_label_extraction_task(document.id)
     if document_type in {"验证方案", "测试规范", "测试报告"}:
         split_document_to_items(document.id)
-        if (document.labels.get("subsystem") == "RFID") or any(suggestion.label_value == "RFID" for suggestion in document.label_suggestions):
+        if document_has_rfid_module(document):
             generate_rfid_supplier_change_package(document.project_id)
 
 
@@ -261,3 +261,9 @@ def infer_document_type(document: DocumentRead) -> str:
     if "方案" in document.filename or "validation" in filename:
         return "验证方案"
     return ""
+
+
+def document_has_rfid_module(document: DocumentRead) -> bool:
+    if document.labels.get("module") == "RFID" or document.labels.get("test_object") == "RFID":
+        return True
+    return any(suggestion.label_value == "RFID" and suggestion.label_key in {"module", "test_object"} for suggestion in document.label_suggestions)

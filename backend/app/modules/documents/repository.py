@@ -8,6 +8,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.core.config import get_settings
 from app.core.database import Base, session_scope
 from app.core.storage import get_storage_backend
+from app.modules.admin.service import get_config
 from app.modules.documents.schemas import (
     DocumentDuplicateResult,
     DocumentLabelSuggestion,
@@ -201,10 +202,12 @@ def _record_to_read(record: DocumentRecord) -> DocumentRead:
 def infer_label_suggestions(filename: str) -> list[DocumentLabelSuggestion]:
     suggestions: list[DocumentLabelSuggestion] = []
     lowered = filename.lower()
+    config = get_config()
     if "g99" in lowered or "dnbseq-g99" in lowered:
         suggestions.append(DocumentLabelSuggestion(label_key="product_model", label_value="DNBSEQ-G99", confidence=0.92, evidence="文件名包含 G99"))
     if "rfid" in lowered:
-        suggestions.append(DocumentLabelSuggestion(label_key="subsystem", label_value="RFID", confidence=0.96, evidence="文件名包含 RFID"))
+        suggestions.append(DocumentLabelSuggestion(label_key="subsystem", label_value=choose_config_option(config.subsystem_catalog, "电子子系统"), confidence=0.9, evidence="文件名包含 RFID，归属电子子系统"))
+        suggestions.append(DocumentLabelSuggestion(label_key="module", label_value="RFID", confidence=0.96, evidence="文件名包含 RFID"))
     if "验证方案" in filename:
         suggestions.append(DocumentLabelSuggestion(label_key="document_type", label_value="验证方案", confidence=0.9, evidence="文件名包含验证方案"))
     if "jira" in lowered:
@@ -212,5 +215,9 @@ def infer_label_suggestions(filename: str) -> list[DocumentLabelSuggestion]:
     if "dfmea" in lowered:
         suggestions.append(DocumentLabelSuggestion(label_key="document_type", label_value="DFMEA", confidence=0.9, evidence="文件名包含 DFMEA"))
     if "供应商" in filename or "二供" in filename:
-        suggestions.append(DocumentLabelSuggestion(label_key="change_type", label_value="供应商变更", confidence=0.82, evidence="文件名包含供应商或二供"))
+        suggestions.append(DocumentLabelSuggestion(label_key="change_type", label_value=choose_config_option(config.change_types, "供应商变更"), confidence=0.82, evidence="文件名包含供应商或二供"))
     return suggestions
+
+
+def choose_config_option(options: list[str], preferred: str) -> str:
+    return preferred if preferred in options else (options[0] if options else preferred)

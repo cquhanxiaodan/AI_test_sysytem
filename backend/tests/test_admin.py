@@ -28,7 +28,7 @@ def test_get_system_config() -> None:
     response = client.get("/api/admin/config", headers=auth_headers())
 
     assert response.status_code == 200
-    assert "RFID" in response.json()["subsystem_catalog"]
+    assert "电子子系统" in response.json()["subsystem_catalog"]
 
 
 def test_admin_can_update_system_dictionary_options() -> None:
