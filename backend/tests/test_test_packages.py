@@ -141,6 +141,79 @@ def test_generate_rfid_supplier_change_package_deduplicates_normalized_titles() 
     assert len([title for title in titles if title.replace(" ", "") == "RFID在机读取测试"]) == 1
 
 
+def test_package_deduplication_keeps_same_title_in_different_modules() -> None:
+    headers = auth_headers()
+    first = create_item_from_fields(
+        project_id="project-g99-rfid",
+        title="在机读取测试",
+        test_object="RFID",
+        subsystem="RFID",
+        objective="验证 RFID 读取。",
+        method="执行 RFID 读取。",
+        record_template="记录读取结果。",
+        evidence="seed",
+        source_type="document",
+        status="published",
+    )
+    second = create_item_from_fields(
+        project_id="project-g99-rfid",
+        title="在机读取测试",
+        test_object="扫码枪",
+        subsystem="电子子系统",
+        objective="验证扫码枪读取。",
+        method="执行扫码枪读取。",
+        record_template="记录读取结果。",
+        evidence="seed",
+        source_type="document",
+        status="published",
+    )
+    client.post(f"/api/test-items/{first.id}/confirm", headers=headers)
+
+    response = client.post(f"/api/test-items/{second.id}/confirm", headers=headers)
+
+    assert response.status_code == 200
+    package_items = next(iter(TEST_PACKAGES.values())).items
+    assert len(package_items) == 2
+    assert {item.test_item_id for item in package_items} == {first.id, second.id}
+
+
+def test_package_deduplication_replaces_same_title_in_same_module() -> None:
+    headers = auth_headers()
+    first = create_item_from_fields(
+        project_id="project-g99-rfid",
+        title="RFID 在机读取测试",
+        test_object="RFID",
+        subsystem="RFID",
+        objective="验证 RFID 读取。",
+        method="执行 RFID 读取。",
+        record_template="记录读取结果。",
+        evidence="seed",
+        source_type="document",
+        status="published",
+    )
+    second = create_item_from_fields(
+        project_id="project-g99-rfid",
+        title="RFID在机读取测试",
+        test_object="RFID",
+        subsystem="RFID",
+        objective="验证 RFID 读取。",
+        method="执行 RFID 读取。",
+        record_template="记录读取结果。",
+        evidence="seed",
+        source_type="document",
+        status="published",
+    )
+    client.post(f"/api/test-items/{first.id}/confirm", headers=headers)
+
+    response = client.post(f"/api/test-items/{second.id}/confirm", headers=headers)
+
+    assert response.status_code == 200
+    package_items = next(iter(TEST_PACKAGES.values())).items
+    assert len(package_items) == 1
+    assert package_items[0].test_item_id == second.id
+    assert package_items[0].module == "RFID"
+
+
 def test_publish_test_package() -> None:
     headers = auth_headers()
     seed_rfid_items(headers)

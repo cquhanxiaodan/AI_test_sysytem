@@ -125,7 +125,7 @@ export type TestPackageAsset = {
   module: string;
   change_type: string;
   applicable_scope: string;
-  items: Array<{ test_item_id: string; title: string; relation_type: string; trigger_condition: string | null }>;
+  items: Array<{ test_item_id: string; title: string; module: string; relation_type: string; trigger_condition: string | null }>;
   recommendation_level: string;
   status: string;
   evidence: string;

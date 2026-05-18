@@ -103,10 +103,10 @@ def split_document_to_items(document_id: str, use_ai: bool = True) -> SplitResul
 
 
 def upsert_split_items(document_id: str, items: list[TestItemAsset]) -> list[TestItemAsset]:
-    existing_by_title = {normalize_test_item_title(item.title): item for item in list_test_items() if item.source_document_id == document_id}
+    existing_by_key = {test_item_deduplication_key(item): item for item in list_test_items() if item.source_document_id == document_id}
     saved_items: list[TestItemAsset] = []
-    for item in deduplicate_items_by_title(items):
-        existing = existing_by_title.get(normalize_test_item_title(item.title))
+    for item in deduplicate_items_by_title_and_module(items):
+        existing = existing_by_key.get(test_item_deduplication_key(item))
         if existing is not None:
             item = item.model_copy(update={"id": existing.id, "status": existing.status, "created_at": existing.created_at})
         _save_item(item)
@@ -114,11 +114,11 @@ def upsert_split_items(document_id: str, items: list[TestItemAsset]) -> list[Tes
     return saved_items
 
 
-def deduplicate_items_by_title(items: list[TestItemAsset]) -> list[TestItemAsset]:
+def deduplicate_items_by_title_and_module(items: list[TestItemAsset]) -> list[TestItemAsset]:
     deduplicated: list[TestItemAsset] = []
     seen: set[str] = set()
     for item in items:
-        key = normalize_test_item_title(item.title)
+        key = test_item_deduplication_key(item)
         if key in seen:
             continue
         seen.add(key)
@@ -126,8 +126,20 @@ def deduplicate_items_by_title(items: list[TestItemAsset]) -> list[TestItemAsset
     return deduplicated
 
 
+def test_item_deduplication_key(item: TestItemAsset) -> str:
+    return build_test_item_deduplication_key(item.title, item.module)
+
+
+def build_test_item_deduplication_key(title: str, module: str = "") -> str:
+    return f"{normalize_test_item_module(module)}:{normalize_test_item_title(title)}"
+
+
 def normalize_test_item_title(title: str) -> str:
     return "".join(title.lower().split())
+
+
+def normalize_test_item_module(module: str) -> str:
+    return "".join(module.lower().split())
 
 
 def split_items_with_ai(project_id: str, document_id: str, filename: str, text: str, fallback_items: list[TestItemAsset]) -> list[TestItemAsset] | None:
@@ -232,9 +244,9 @@ def create_item_from_fields(
     source_type: str = "manual",
     status: str = "draft",
 ) -> TestItemAsset:
-    existing = find_test_item_by_title(project_id, title)
     normalized_subsystem = normalize_subsystem(subsystem)
     module = infer_module_from_text(title, test_object, subsystem, evidence)
+    existing = find_test_item_by_title_and_module(project_id, title, module)
     if module == "RFID":
         test_object = "RFID"
         normalized_subsystem = normalize_subsystem("电子子系统")
@@ -287,8 +299,12 @@ def create_item_from_fields(
 
 
 def find_test_item_by_title(project_id: str, title: str) -> TestItemAsset | None:
-    normalized_title = normalize_test_item_title(title)
-    return next((item for item in list_test_items(project_id) if normalize_test_item_title(item.title) == normalized_title), None)
+    return next((item for item in list_test_items(project_id) if normalize_test_item_title(item.title) == normalize_test_item_title(title)), None)
+
+
+def find_test_item_by_title_and_module(project_id: str, title: str, module: str) -> TestItemAsset | None:
+    deduplication_key = build_test_item_deduplication_key(title, module)
+    return next((item for item in list_test_items(project_id) if test_item_deduplication_key(item) == deduplication_key), None)
 
 
 def get_item(item_id: str) -> TestItemAsset | None:

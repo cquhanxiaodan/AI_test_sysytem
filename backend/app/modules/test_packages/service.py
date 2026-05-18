@@ -7,7 +7,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.core.config import get_settings
 from app.core.database import Base, session_scope
 from app.modules.admin.service import get_config
-from app.modules.test_items.service import list_test_items, normalize_test_item_title
+from app.modules.test_items.service import build_test_item_deduplication_key, list_test_items
 from app.modules.test_packages.schemas import TestPackageAsset, TestPackageItem, TestPackageUpdate
 
 TEST_PACKAGES: dict[str, TestPackageAsset] = {}
@@ -55,6 +55,7 @@ def generate_rfid_supplier_change_package(project_id: str) -> TestPackageAsset:
             TestPackageItem(
                 test_item_id=item.id,
                 title=item.title,
+                module=item.module,
                 relation_type=relation_type_for_title(item.title),
                 trigger_condition="涉及供应商、结构、标签材料或整机 EMC 风险变化时触发" if "安规" in item.title else None,
             )
@@ -90,6 +91,7 @@ def assign_item_to_package(item) -> TestPackageAsset:
     package_item = TestPackageItem(
         test_item_id=item.id,
         title=item.title,
+        module=item.module or "",
         relation_type=relation_type_for_title(item.title),
         trigger_condition="涉及供应商、结构、标签材料或整机 EMC 风险变化时触发" if "安规" in item.title else None,
     )
@@ -155,9 +157,9 @@ def create_package_for_item(item, package_name: str, package_item: TestPackageIt
 def upsert_package_item(items: list[TestPackageItem], package_item: TestPackageItem) -> list[TestPackageItem]:
     updated: list[TestPackageItem] = []
     replaced = False
-    package_item_title = normalize_test_item_title(package_item.title)
+    package_item_key = build_package_item_deduplication_key(package_item)
     for item in items:
-        if item.test_item_id == package_item.test_item_id or normalize_test_item_title(item.title) == package_item_title:
+        if item.test_item_id == package_item.test_item_id or build_package_item_deduplication_key(item) == package_item_key:
             updated.append(package_item)
             replaced = True
         else:
@@ -169,14 +171,26 @@ def upsert_package_item(items: list[TestPackageItem], package_item: TestPackageI
 
 def deduplicate_package_items(items: list[TestPackageItem]) -> list[TestPackageItem]:
     deduplicated: list[TestPackageItem] = []
-    seen_titles: set[str] = set()
+    seen_keys: set[str] = set()
     for item in items:
-        title_key = normalize_test_item_title(item.title)
-        if title_key in seen_titles:
+        item_key = build_package_item_deduplication_key(item)
+        if item_key in seen_keys:
             continue
-        seen_titles.add(title_key)
+        seen_keys.add(item_key)
         deduplicated.append(item)
     return deduplicated
+
+
+def build_package_item_deduplication_key(item: TestPackageItem) -> str:
+    return build_test_item_deduplication_key(item.title, infer_package_item_module(item))
+
+
+def infer_package_item_module(item: TestPackageItem) -> str:
+    if item.module:
+        return item.module
+    if "RFID" in item.title.upper():
+        return "RFID"
+    return ""
 
 
 def find_package_by_name(name: str) -> TestPackageAsset | None:

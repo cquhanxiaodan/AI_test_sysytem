@@ -6,6 +6,7 @@ from pydantic import BaseModel
 class TestPackageItem(BaseModel):
     test_item_id: str
     title: str
+    module: str = ""
     relation_type: str
     trigger_condition: str | None = None
 
