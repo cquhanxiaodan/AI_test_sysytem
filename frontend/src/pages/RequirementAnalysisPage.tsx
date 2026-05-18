@@ -258,7 +258,7 @@ export default function RequirementAnalysisPage() {
     const updated = await includeRequirementRecommendationInLocal(analysis.id, item.id);
     setAnalysis(updated);
     refreshAnalyses(updated);
-    message.success("已纳入本地测试条目资产草稿，发布后会自动归并归口包");
+    message.success("已纳入本地测试条目资产草稿，仍需确认后才会进入测试方案");
   }
 
   function statusTag(status: string) {
@@ -461,6 +461,7 @@ export default function RequirementAnalysisPage() {
                   <>
                     <Tag color={item.source_type === "ai_generated" ? "purple" : "blue"}>{item.group}</Tag>
                     {item.source_type === "ai_generated" && <Tag color="purple">AI新增</Tag>}
+                    {item.source_type === "test_item" && item.source_id !== "manual" && item.review_status === "pending" && <Tag color="cyan">已纳入本地草稿</Tag>}
                     {statusTag(item.review_status)}{item.title}
                   </>
                 }

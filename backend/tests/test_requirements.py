@@ -397,6 +397,12 @@ def test_include_ai_recommendation_in_local_test_items(monkeypatch) -> None:
         json={"project_id": "project-g99-rfid", "description": "DNBSEQ-G99 引入二供供应商康奈特 RFID"},
     ).json()
     recommendation = next(item for item in analysis["recommendations"] if item["source_type"] == "ai_generated")
+    confirmed = client.patch(
+        f"/api/requirement-analyses/{analysis['id']}/recommendations/{recommendation['id']}",
+        headers=headers,
+        json={"review_status": "confirmed"},
+    )
+    assert confirmed.status_code == 200
 
     included = client.post(
         f"/api/requirement-analyses/{analysis['id']}/recommendations/{recommendation['id']}/include-local",
