@@ -120,6 +120,8 @@ export type TestPackageAsset = {
   name: string;
   package_type: string;
   test_object: string;
+  subsystem: string;
+  module: string;
   change_type: string;
   applicable_scope: string;
   items: Array<{ test_item_id: string; title: string; relation_type: string; trigger_condition: string | null }>;
@@ -131,7 +133,7 @@ export type TestPackageAsset = {
 
 export type TestPackageUpdate = Partial<Pick<
   TestPackageAsset,
-  "name" | "package_type" | "test_object" | "change_type" | "applicable_scope" | "items" | "recommendation_level" | "evidence"
+  "name" | "package_type" | "test_object" | "subsystem" | "module" | "change_type" | "applicable_scope" | "items" | "recommendation_level" | "evidence"
 >>;
 
 export type TestPackageBulkPublishResult = {

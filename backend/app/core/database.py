@@ -68,6 +68,7 @@ def init_database() -> None:
     Base.metadata.create_all(bind=engine)
     ensure_requirement_analysis_columns(engine)
     ensure_test_item_columns(engine)
+    ensure_test_package_columns(engine)
 
 
 def ensure_requirement_analysis_columns(engine) -> None:
@@ -101,6 +102,23 @@ def ensure_test_item_columns(engine) -> None:
         statements.append("ALTER TABLE test_items ADD COLUMN compliance_bug_info TEXT DEFAULT ''")
     if "source_section_text" not in existing_columns:
         statements.append("ALTER TABLE test_items ADD COLUMN source_section_text TEXT DEFAULT ''")
+    if not statements:
+        return
+    with engine.begin() as connection:
+        for statement in statements:
+            connection.execute(text(statement))
+
+
+def ensure_test_package_columns(engine) -> None:
+    inspector = inspect(engine)
+    if "test_packages" not in inspector.get_table_names():
+        return
+    existing_columns = {column["name"] for column in inspector.get_columns("test_packages")}
+    statements = []
+    if "subsystem" not in existing_columns:
+        statements.append("ALTER TABLE test_packages ADD COLUMN subsystem VARCHAR(120) DEFAULT ''")
+    if "module" not in existing_columns:
+        statements.append("ALTER TABLE test_packages ADD COLUMN module VARCHAR(120) DEFAULT ''")
     if not statements:
         return
     with engine.begin() as connection:

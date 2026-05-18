@@ -16,6 +16,8 @@ class TestPackageAsset(BaseModel):
     name: str
     package_type: str
     test_object: str
+    subsystem: str = ""
+    module: str = ""
     change_type: str
     applicable_scope: str
     items: list[TestPackageItem]
@@ -29,6 +31,8 @@ class TestPackageUpdate(BaseModel):
     name: str | None = None
     package_type: str | None = None
     test_object: str | None = None
+    subsystem: str | None = None
+    module: str | None = None
     change_type: str | None = None
     applicable_scope: str | None = None
     items: list[TestPackageItem] | None = None

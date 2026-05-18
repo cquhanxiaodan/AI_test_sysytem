@@ -50,6 +50,7 @@ export default function TestAssetsPage() {
   const [editForm] = Form.useForm<TestItemUpdate>();
   const selectedPrimarySubsystem = Form.useWatch("primary_subsystem", editForm);
   const [packageForm] = Form.useForm<TestPackageUpdate & { items_text?: string }>();
+  const selectedPackageSubsystem = Form.useWatch("subsystem", packageForm);
   const [riskForm] = Form.useForm<RiskUpdate>();
 
   async function loadItems() {
@@ -168,9 +169,11 @@ export default function TestAssetsPage() {
     if (values.items_text) {
       parsedItems = JSON.parse(values.items_text);
     }
-    await updateTestPackage(editingPackage.id, { ...values, items: parsedItems });
+    const { items_text: _itemsText, ...payload } = values;
+    await updateTestPackage(editingPackage.id, { ...payload, items: parsedItems });
     message.success("测试归口包已更新");
     setEditingPackage(null);
+    packageForm.resetFields();
     await loadItems();
   }
 
@@ -271,6 +274,8 @@ export default function TestAssetsPage() {
     { title: "归口包", dataIndex: "name" },
     { title: "所属项目", dataIndex: "project_id", render: (projectId) => projects.find((project) => project.id === projectId)?.name ?? projectId },
     { title: "对象", dataIndex: "test_object" },
+    { title: "子系统", dataIndex: "subsystem", render: (value) => value || "-" },
+    { title: "模块", dataIndex: "module", render: (value) => value || "-" },
     { title: "变更类型", dataIndex: "change_type" },
     { title: "条目数", dataIndex: "items", render: (items: TestPackageAsset["items"]) => items.length },
     { title: "状态", dataIndex: "status", render: (status) => <Tag color="purple">{status}</Tag> },
@@ -327,7 +332,7 @@ export default function TestAssetsPage() {
     <section>
       <Typography.Title level={2}>测试资产</Typography.Title>
       <Typography.Paragraph type="secondary">
-        查看由统一资料池自动沉淀的测试条目、测试归口包和风险知识项。验证方案/测试规范发布后自动拆分测试条目并生成归口包，Jira/DFMEA 发布后自动解析为风险知识源。
+        查看由统一资料池自动沉淀的测试条目、测试归口包和风险知识项。验证方案/测试规范发布后自动拆分测试条目，测试条目发布后归并归口包，Jira/DFMEA 发布后自动解析为风险知识源。
       </Typography.Paragraph>
       <Card className="section-card">
         <Typography.Title level={4}>自动生成规则</Typography.Title>
@@ -465,7 +470,7 @@ export default function TestAssetsPage() {
             <Input placeholder="例如：RFID 读写模块" />
           </Form.Item>
           <Form.Item label="主子系统" name="primary_subsystem">
-            <Select showSearch options={(systemConfig?.subsystem_catalog ?? []).map((value) => ({ label: value, value }))} />
+            <Select showSearch options={(systemConfig?.subsystem_catalog ?? []).map((value) => ({ label: value, value }))} onChange={() => editForm.setFieldValue("module", "")} />
           </Form.Item>
           <Form.Item label="模块" name="module">
             <Select showSearch allowClear placeholder="请先选择主子系统，再选择模块" options={toOptions(moduleOptions(systemConfig, selectedPrimarySubsystem))} />
@@ -499,11 +504,13 @@ export default function TestAssetsPage() {
           </Form.Item>
         </Form>
       </Modal>
-      <Modal title="编辑测试归口包" open={Boolean(editingPackage)} onCancel={() => setEditingPackage(null)} onOk={saveEditingPackage} width={760}>
+      <Modal title="编辑测试归口包" open={Boolean(editingPackage)} onCancel={() => { setEditingPackage(null); packageForm.resetFields(); }} onOk={saveEditingPackage} width={760}>
         <Form form={packageForm} layout="vertical">
           <Form.Item label="归口包名称" name="name"><Input /></Form.Item>
           <Form.Item label="包类型" name="package_type"><Input /></Form.Item>
           <Form.Item label="测试对象" name="test_object"><Input /></Form.Item>
+          <Form.Item label="子系统" name="subsystem"><Select showSearch allowClear options={(systemConfig?.subsystem_catalog ?? []).map((value) => ({ label: value, value }))} onChange={() => packageForm.setFieldValue("module", "")} /></Form.Item>
+          <Form.Item label="模块" name="module"><Select showSearch allowClear placeholder="请先选择子系统，再选择模块" options={toOptions(moduleOptions(systemConfig, selectedPackageSubsystem))} /></Form.Item>
           <Form.Item label="变更类型" name="change_type"><Select showSearch options={(systemConfig?.change_types ?? []).map((value) => ({ label: value, value }))} /></Form.Item>
           <Form.Item label="适用范围" name="applicable_scope"><Input.TextArea rows={2} /></Form.Item>
           <Form.Item label="推荐级别" name="recommendation_level"><Select options={["high", "medium", "low"].map((value) => ({ label: value, value }))} /></Form.Item>

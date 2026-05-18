@@ -6,6 +6,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.config import get_settings
 from app.core.database import Base, session_scope
+from app.modules.admin.service import get_config
 from app.modules.test_items.service import list_test_items
 from app.modules.test_packages.schemas import TestPackageAsset, TestPackageItem, TestPackageUpdate
 
@@ -21,6 +22,8 @@ class TestPackageRecord(Base):
     name: Mapped[str] = mapped_column(String(500))
     package_type: Mapped[str] = mapped_column(String(120), index=True)
     test_object: Mapped[str] = mapped_column(String(120), index=True)
+    subsystem: Mapped[str] = mapped_column(String(120), default="", index=True)
+    module: Mapped[str] = mapped_column(String(120), default="", index=True)
     change_type: Mapped[str] = mapped_column(String(120), index=True)
     applicable_scope: Mapped[str] = mapped_column(String(1000))
     items: Mapped[list[dict]] = mapped_column(JSON)
@@ -62,6 +65,8 @@ def generate_rfid_supplier_change_package(project_id: str) -> TestPackageAsset:
         name=RFID_SUPPLIER_PACKAGE_NAME,
         package_type="变更归口",
         test_object="RFID",
+        subsystem=normalize_package_subsystem("电子子系统"),
+        module="RFID",
         change_type="供应商变更",
         applicable_scope="DNBSEQ-G99 RFID 二供或供应商切换验证",
         items=package_items,
@@ -107,14 +112,14 @@ def find_suitable_package_for_item(item, package_name: str) -> TestPackageAsset 
     test_object = module or subsystem
     packages = list_packages()
     if module:
-        matched = next((package for package in packages if package.test_object == module), None)
+        matched = next((package for package in packages if package.module == module or package.test_object == module), None)
         if matched is not None:
             return matched
     return next(
         (
             package
             for package in packages
-            if package.test_object == test_object
+            if package.subsystem == subsystem or package.test_object == test_object
         ),
         None,
     ) or find_package_by_name(package_name)
@@ -129,6 +134,8 @@ def create_package_for_item(item, package_name: str, package_item: TestPackageIt
         name=package_name,
         package_type="变更归口",
         test_object=test_object,
+        subsystem=normalize_package_subsystem(item.primary_subsystem or ""),
+        module=item.module or "",
         change_type=change_type,
         applicable_scope=f"{test_object} {change_type}相关测试条目归口",
         items=[package_item],
@@ -185,6 +192,14 @@ def update_package(package_id: str, payload: TestPackageUpdate) -> TestPackageAs
         return package
     if "items" in updates:
         updates["items"] = [TestPackageItem(**item) for item in updates["items"]]
+    if "subsystem" in updates:
+        updates["subsystem"] = normalize_package_subsystem(updates["subsystem"] or "")
+    if "module" in updates:
+        updates["module"] = normalize_package_module(updates["module"] or "", updates.get("subsystem", package.subsystem))
+    if "subsystem" in updates or "module" in updates:
+        test_object = updates.get("module") or updates.get("subsystem") or package.test_object
+        updates["test_object"] = test_object
+        updates.setdefault("name", f"{test_object}测试归口包")
     updated = package.model_copy(update={**updates, "status": "draft" if package.status != "draft" else package.status})
     _save_package(updated)
     return updated
@@ -250,6 +265,8 @@ def _package_to_record(package: TestPackageAsset) -> TestPackageRecord:
         name=package.name,
         package_type=package.package_type,
         test_object=package.test_object,
+        subsystem=package.subsystem,
+        module=package.module,
         change_type=package.change_type,
         applicable_scope=package.applicable_scope,
         items=[item.model_dump() for item in package.items],
@@ -267,6 +284,8 @@ def _record_to_package(record: TestPackageRecord) -> TestPackageAsset:
         name=record.name,
         package_type=record.package_type,
         test_object=record.test_object,
+        subsystem=getattr(record, "subsystem", None) or infer_package_subsystem(record.test_object),
+        module=getattr(record, "module", None) or infer_package_module(record.test_object),
         change_type=record.change_type,
         applicable_scope=record.applicable_scope,
         items=[TestPackageItem(**item) for item in (record.items or [])],
@@ -275,3 +294,37 @@ def _record_to_package(record: TestPackageRecord) -> TestPackageAsset:
         evidence=record.evidence,
         created_at=record.created_at,
     )
+
+
+def normalize_package_subsystem(value: str) -> str:
+    config = get_config()
+    if value in config.subsystem_catalog:
+        return value
+    if value in {"RFID", "电子子系统", "电子系统"}:
+        return next((subsystem for subsystem in config.subsystem_catalog if "电子" in subsystem), value)
+    return value
+
+
+def normalize_package_module(value: str, subsystem: str = "") -> str:
+    if not value:
+        return ""
+    config = get_config()
+    candidates = config.subsystem_modules.get(subsystem, []) if subsystem else []
+    all_modules = [module for modules in config.subsystem_modules.values() for module in modules]
+    return value if value in candidates or value in all_modules else value
+
+
+def infer_package_module(test_object: str) -> str:
+    config = get_config()
+    all_modules = [module for modules in config.subsystem_modules.values() for module in modules]
+    return test_object if test_object in all_modules else ""
+
+
+def infer_package_subsystem(test_object: str) -> str:
+    config = get_config()
+    if test_object in config.subsystem_catalog:
+        return test_object
+    for subsystem, modules in config.subsystem_modules.items():
+        if test_object in modules:
+            return subsystem
+    return ""
