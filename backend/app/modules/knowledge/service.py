@@ -9,10 +9,14 @@ def search_project_knowledge(project_id: str, query: str) -> list[SearchResult]:
     candidates: list[SearchResult] = []
 
     for item in list_test_items(project_id):
+        if item.status != "published":
+            continue
         text = " ".join([item.title, item.objective, item.method, item.evidence])
         candidates.append(SearchResult(source_type="test_item", source_id=item.id, title=item.title, text=text, score=score_text(text, terms)))
 
     for package in list_packages(project_id):
+        if package.status != "published":
+            continue
         text = " ".join([package.name, package.change_type, package.applicable_scope, package.evidence])
         candidates.append(SearchResult(source_type="test_package", source_id=package.id, title=package.name, text=text, score=score_text(text, terms)))
 

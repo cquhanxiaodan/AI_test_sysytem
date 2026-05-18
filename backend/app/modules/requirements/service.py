@@ -387,6 +387,8 @@ def build_local_recommendations(project_id: str, parse_result: RequirementParseR
     recommendations: list[RequirementRecommendation] = []
     query = build_requirement_search_query(parse_result)
     for package in list_packages(project_id):
+        if package.status != "published":
+            continue
         if package.test_object != parse_result.test_object or package.change_type != parse_result.change_type:
             continue
         for item in package.items:

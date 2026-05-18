@@ -47,7 +47,8 @@ def seed_assets(headers: dict[str, str]) -> None:
     )
     document_id = upload.json()["document"]["id"]
     client.post(f"/api/test-items/split/{document_id}", headers=headers)
-    client.post("/api/test-packages/generate-rfid-supplier-change?project_id=project-g99-rfid", headers=headers)
+    package = client.post("/api/test-packages/generate-rfid-supplier-change?project_id=project-g99-rfid", headers=headers).json()
+    client.post(f"/api/test-packages/{package['id']}/publish", headers=headers)
     client.post(
         "/api/risks/parse",
         headers=headers,
@@ -70,6 +71,46 @@ def test_requirement_analysis_recommends_rfid_package_and_risks() -> None:
     assert analysis["parse_result"]["test_object"] == "RFID"
     groups = {item["group"] for item in analysis["recommendations"]}
     assert {"必测", "建议", "条件触发", "风险补充"}.issubset(groups)
+
+
+def test_requirement_analysis_uses_only_published_test_assets() -> None:
+    headers = auth_headers()
+    upload = client.post(
+        "/api/documents/upload",
+        headers=headers,
+        data={"project_id": "project-g99-rfid"},
+        files={"file": ("RFID验证方案.txt", b"RFID", "text/plain")},
+    )
+    document_id = upload.json()["document"]["id"]
+    client.post(f"/api/test-items/split/{document_id}", headers=headers)
+    client.post("/api/test-packages/generate-rfid-supplier-change?project_id=project-g99-rfid", headers=headers)
+    client.post(
+        "/api/risks/parse",
+        headers=headers,
+        json={"project_id": "project-g99-rfid", "source_type": "jira", "content": "title\nRFID读取失败\n"},
+    )
+
+    draft_result = client.post(
+        "/api/requirement-analyses/local",
+        headers=headers,
+        json={"project_id": "project-g99-rfid", "description": "DNBSEQ-G99 引入二供供应商康奈特 RFID"},
+    )
+    package = client.get("/api/test-packages?project_id=project-g99-rfid", headers=headers).json()[0]
+    client.post(f"/api/test-packages/{package['id']}/publish", headers=headers)
+    published_result = client.post(
+        "/api/requirement-analyses/local",
+        headers=headers,
+        json={"project_id": "project-g99-rfid", "description": "DNBSEQ-G99 引入二供供应商康奈特 RFID"},
+    )
+
+    assert draft_result.status_code == 200
+    assert published_result.status_code == 200
+    draft_sources = {item["source_type"] for item in draft_result.json()["recommendations"]}
+    published_sources = {item["source_type"] for item in published_result.json()["recommendations"]}
+    assert "test_package" not in draft_sources
+    assert "test_item" not in draft_sources
+    assert "risk" in draft_sources
+    assert "test_package" in published_sources
 
 
 def test_latest_requirement_analysis_returns_project_latest() -> None:

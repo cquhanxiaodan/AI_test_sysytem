@@ -51,7 +51,8 @@ def seed_assets(headers: dict[str, str]) -> None:
     )
     document_id = upload.json()["document"]["id"]
     client.post(f"/api/test-items/split/{document_id}", headers=headers)
-    client.post("/api/test-packages/generate-rfid-supplier-change?project_id=project-g99-rfid", headers=headers)
+    package = client.post("/api/test-packages/generate-rfid-supplier-change?project_id=project-g99-rfid", headers=headers).json()
+    client.post(f"/api/test-packages/{package['id']}/publish", headers=headers)
     client.post(
         "/api/risks/parse",
         headers=headers,
@@ -224,7 +225,8 @@ RFID安装；
     client.post(f"/api/parsing/documents/{document_id}/parse", headers=headers)
     split = client.post(f"/api/test-items/split/{document_id}", headers=headers)
     item_id = split.json()["items"][0]["id"]
-    client.post("/api/test-packages/generate-rfid-supplier-change?project_id=project-g99-rfid", headers=headers)
+    package = client.post("/api/test-packages/generate-rfid-supplier-change?project_id=project-g99-rfid", headers=headers).json()
+    client.post(f"/api/test-packages/{package['id']}/publish", headers=headers)
 
     analysis = create_analysis(headers)
     update_recommendation_status(headers, analysis, 0, "confirmed")
