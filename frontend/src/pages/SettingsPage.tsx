@@ -224,9 +224,9 @@ export default function SettingsPage() {
         </Form>
       </Card>
 
-      <Card title="统一资料池导入目录" className="section-card">
+      <Card title="统一资料池服务器导入目录" className="section-card">
         <Typography.Paragraph type="secondary">
-          资料导入目录按当前账号保存。统一资料池页面点击扫描新增资料时，会读取当前账号配置目录下的普通文件并按 hash 去重导入。
+          该目录是后端服务器可访问的目录，按当前账号保存。用户电脑本地文件夹请在统一资料池页面使用“选择本地文件夹”上传。
         </Typography.Paragraph>
         {documentImportConfig && (
           <Descriptions column={1} size="small" className="section-card">
@@ -237,7 +237,7 @@ export default function SettingsPage() {
           </Descriptions>
         )}
         <Form form={documentImportForm} layout="vertical" onFinish={saveDocumentImport}>
-          <Form.Item name="import_directory" label="个人资料导入目录" extra="示例：/data/gene-test-imports。该路径需要后端服务进程可读取。">
+          <Form.Item name="import_directory" label="个人服务器导入目录" extra="示例：/data/gene-test-imports。该路径需要后端服务进程可读取。">
             <Input placeholder="/data/gene-test-imports" />
           </Form.Item>
           <Space>

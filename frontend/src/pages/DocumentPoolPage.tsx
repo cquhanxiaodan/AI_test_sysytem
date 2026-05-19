@@ -67,7 +67,10 @@ export default function DocumentPoolPage() {
 
   async function submitBatchUpload() {
     if (!currentProject) return false;
-    const files = batchFiles.flatMap((file) => file.originFileObj ? [file.originFileObj as File] : []);
+    const files = batchFiles.flatMap((file) => {
+      const rawFile = file.originFileObj ?? (file as unknown as File);
+      return rawFile instanceof File ? [rawFile] : [];
+    });
     if (files.length === 0) {
       message.warning("请先选择批量上传文件");
       return false;
@@ -198,15 +201,26 @@ export default function DocumentPoolPage() {
         >
           <Button disabled={!currentProject}>选择批量文件</Button>
         </Upload>
+        <Upload
+          beforeUpload={handleBatchUpload}
+          fileList={batchFiles}
+          onRemove={(file) => setBatchFiles((current) => current.filter((item) => item.uid !== file.uid))}
+          multiple
+          directory
+          showUploadList={false}
+        >
+          <Button disabled={!currentProject}>选择本地文件夹</Button>
+        </Upload>
         <Button disabled={!currentProject || batchFiles.length === 0} onClick={submitBatchUpload}>提交批量上传</Button>
         <Button disabled={!currentProject || !importDirectory} onClick={scanImportDirectory}>扫描新增资料</Button>
         <Button disabled={documents.length === 0} onClick={invertSelectedDocuments}>反选</Button>
         <Button danger disabled={selectedDocumentIds.length === 0} onClick={deleteSelectedDocuments}>删除选中资料</Button>
+        <Typography.Text type="secondary">待上传 {batchFiles.length} 个文件</Typography.Text>
         <Typography.Text type="secondary">已选择 {selectedDocumentIds.length} 条</Typography.Text>
       </Space>
       <Card className="section-card">
         <Typography.Paragraph type="secondary">
-          服务器导入目录：{importDirectory || "未配置，请到系统设置中配置资料导入目录"}
+          本地文件夹通过浏览器选择后直接上传；服务器目录扫描读取后端服务可访问的目录：{importDirectory || "未配置，请到系统设置中配置服务器导入目录"}
         </Typography.Paragraph>
       </Card>
       <Card>
