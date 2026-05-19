@@ -15,7 +15,6 @@ import {
   reviewDocument,
   scanDocumentImportDirectory,
   updateDocumentLabels,
-  uploadDocument,
   uploadDocuments,
   SystemConfig,
 } from "../api/client";
@@ -51,14 +50,6 @@ export default function DocumentPoolPage() {
       .catch(() => setImportDirectory(""));
     fetchSystemConfig().then(setSystemConfig).catch(() => setSystemConfig(null));
   }, [currentProject?.id]);
-
-  async function handleUpload(file: File) {
-    if (!currentProject) return false;
-    await uploadDocument(currentProject.id, file);
-    message.success("资料已上传，请确认标签；管理员发布后系统会自动沉淀对应测试资产");
-    await loadDocuments();
-    return false;
-  }
 
   function handleBatchUpload(file: UploadFile) {
     setBatchFiles((current) => [...current, file]);
@@ -190,16 +181,13 @@ export default function DocumentPoolPage() {
             上传测试规范、验证方案、测试报告、Jira 导出和 DFMEA 文件。资料发布后会按文档类型自动进入解析、测试条目拆分、归口包生成或风险知识源入库流程。
           </Typography.Paragraph>
         </div>
-        <Upload beforeUpload={handleUpload} showUploadList={false}>
-          <Button type="primary" disabled={!currentProject}>上传资料</Button>
-        </Upload>
         <Upload
           beforeUpload={handleBatchUpload}
           fileList={batchFiles}
           onRemove={(file) => setBatchFiles((current) => current.filter((item) => item.uid !== file.uid))}
           multiple
         >
-          <Button disabled={!currentProject}>选择批量文件</Button>
+          <Button type="primary" disabled={!currentProject}>选择本地文件</Button>
         </Upload>
         <Upload
           beforeUpload={handleBatchUpload}
@@ -211,7 +199,7 @@ export default function DocumentPoolPage() {
         >
           <Button disabled={!currentProject}>选择本地文件夹</Button>
         </Upload>
-        <Button disabled={!currentProject || batchFiles.length === 0} onClick={submitBatchUpload}>提交批量上传</Button>
+        <Button disabled={!currentProject || batchFiles.length === 0} onClick={submitBatchUpload}>上传选中文件</Button>
         <Button disabled={!currentProject || !importDirectory} onClick={scanImportDirectory}>扫描新增资料</Button>
         <Button disabled={documents.length === 0} onClick={invertSelectedDocuments}>反选</Button>
         <Button danger disabled={selectedDocumentIds.length === 0} onClick={deleteSelectedDocuments}>删除选中资料</Button>
@@ -220,7 +208,7 @@ export default function DocumentPoolPage() {
       </Space>
       <Card className="section-card">
         <Typography.Paragraph type="secondary">
-          本地文件夹通过浏览器选择后直接上传；服务器目录扫描读取后端服务可访问的目录：{importDirectory || "未配置，请到系统设置中配置服务器导入目录"}
+          本地文件和本地文件夹通过浏览器选择后上传；服务器目录扫描读取后端服务可访问的目录：{importDirectory || "未配置，请到系统设置中配置服务器导入目录"}
         </Typography.Paragraph>
       </Card>
       <Card>
