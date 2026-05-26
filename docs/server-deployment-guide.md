@@ -1,6 +1,6 @@
 # 服务器部署与迁移指南
 
-本文档用于把基因测序仪 AI 测试方案平台从临时预览环境迁移到团队服务器。当前项目包含前端 Web、FastAPI 后端、Celery Worker、PostgreSQL、Redis 和 MinIO。推荐先使用 Docker Compose 完成单机服务器部署，后续再按团队规模拆分到独立数据库、对象存储或容器平台。
+本文档用于把基因测序仪 AI 测试方案平台从临时预览环境迁移到团队服务器。当前项目包含前端 Web、FastAPI 后端、Celery Worker、PostgreSQL、Redis 和 MinIO。推荐先使用 Docker Compose 完成单机服务器部署，后续再按团队规模拆分到独立数据库、对象存储或容器平台。长期生产部署可参考 `docs/production-deployment-guide.md`。
 
 ## 适用场景
 
