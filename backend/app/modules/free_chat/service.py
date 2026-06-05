@@ -21,7 +21,7 @@ def answer_free_chat(
     sources = search_project_knowledge(project_id, query)[:8] if use_project_knowledge else []
     source_reads = [FreeChatSource(**source.model_dump()) for source in sources]
     if use_external_model:
-        ai_answer, ai_status, ai_message = answer_with_ai(question, source_reads, history, user_id)
+        ai_answer, ai_status, ai_message = answer_with_ai(question, source_reads, history, user_id, use_project_knowledge)
         logger.info("free_chat_ai_result status=%s used_model=%s message=%s", ai_status, bool(ai_answer), ai_message)
         if ai_answer:
             return FreeChatResponse(
@@ -50,16 +50,19 @@ def answer_with_ai(
     sources: list[FreeChatSource],
     history: list[FreeChatMessage],
     user_id: str | None = None,
+    use_project_knowledge: bool = True,
 ) -> tuple[str | None, str, str]:
+    knowledge_prompt = build_ai_knowledge_prompt(sources) if use_project_knowledge else "本次未启用项目资料库检索，请基于当前对话和你的通用知识回答。"
     result = run_json_task_detailed(
         "free_chat",
         "你是基因测序仪测试知识问答助手。只输出 JSON，不输出解释。",
         (
-            "基于当前对话上下文、用户最新问题和项目资料库命中内容回答。输出 answer 字段。"
-            "回答需要标注依据来自资料库命中；资料不足时说明需要补充资料。"
+            "基于当前对话上下文和用户最新问题回答。输出 answer 字段。"
+            "如果提供了项目资料库命中内容，将其作为参考上下文使用；回答可以结合你的通用知识进行扩展。"
+            "当资料库没有命中或未启用资料库时，直接基于通用知识给出有帮助的回答。"
             f"\n最近对话：{[message.model_dump() for message in history[-8:]]}"
             f"\n问题：{question}"
-            f"\n资料库命中：{[source.model_dump() for source in sources]}"
+            f"\n资料库参考：{knowledge_prompt}"
         ),
         user_id=user_id,
         timeout_seconds_override=FREE_CHAT_AI_TIMEOUT_SECONDS,
@@ -68,6 +71,12 @@ def answer_with_ai(
     if output is None or not isinstance(output.get("answer"), str):
         return None, result.status, result.message
     return output["answer"], result.status, result.message
+
+
+def build_ai_knowledge_prompt(sources: list[FreeChatSource]) -> str:
+    if not sources:
+        return "项目资料库没有命中内容，请基于当前对话和你的通用知识回答。"
+    return str([source.model_dump() for source in sources])
 
 
 def build_local_answer(question: str, sources: list[FreeChatSource], history: list[FreeChatMessage]) -> str:

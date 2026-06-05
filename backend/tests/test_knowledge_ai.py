@@ -384,6 +384,54 @@ def test_free_chat_caps_ai_timeout(monkeypatch) -> None:
     assert timeouts == [25]
 
 
+def test_free_chat_without_project_knowledge_allows_general_ai_answer(monkeypatch) -> None:
+    headers = auth_headers()
+    config_response = client.put(
+        "/api/ai/config",
+        headers=headers,
+        json={
+            "provider": "openai-compatible",
+            "base_url": "https://model.example.com/v1",
+            "api_key": "secret",
+            "model": "test-model",
+            "timeout_seconds": 20,
+        },
+    )
+    assert config_response.status_code == 200
+    prompts: list[str] = []
+
+    def fake_urlopen(req, timeout):
+        payload = json.loads(req.data.decode("utf-8"))
+        prompts.append(payload["messages"][1]["content"])
+
+        class Response:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def read(self):
+                return json.dumps({"choices": [{"message": {"content": '{"answer":"可基于通用测试知识回答"}'}}]}).encode("utf-8")
+
+        return Response()
+
+    monkeypatch.setattr("app.modules.ai.service.request.urlopen", fake_urlopen)
+
+    response = client.post(
+        "/api/free-chat/ask",
+        headers=headers,
+        json={"project_id": "project-g99-rfid", "question": "如何扩展 RFID 测试？", "use_project_knowledge": False, "use_external_model": True},
+    )
+
+    assert response.status_code == 200
+    result = response.json()
+    assert result["used_model"] is True
+    assert result["sources"] == []
+    assert "通用知识" in prompts[0]
+    assert "资料不足时说明需要补充资料" not in prompts[0]
+
+
 def test_free_chat_uses_conversation_history_for_follow_up() -> None:
     headers = auth_headers()
     risks = client.post(

@@ -60,7 +60,7 @@ export default function FreeChatPage() {
     <section>
       <Typography.Title level={2}>自由应用</Typography.Title>
       <Typography.Paragraph type="secondary">
-        面向当前项目空间连续对话式提问。系统会结合当前会话上下文，优先检索已上传并沉淀的资料库，再结合已配置的大模型生成回答。
+        面向当前项目空间连续对话式提问。开启项目资料库时，系统会把命中的本地资料作为参考提供给大模型；关闭后，大模型会基于当前对话和通用知识自由回答。
       </Typography.Paragraph>
       <Card
         title="当前对话"
@@ -125,7 +125,7 @@ export default function FreeChatPage() {
           <Form.Item name="question" label="问题" rules={[{ required: true, message: "请输入问题" }]}> 
             <Input.TextArea rows={4} placeholder="例如：G99 ECR4.0 需要重点关注哪些历史风险和回归测试？也可以继续追问：这些风险里哪些要进入验证方案？" />
           </Form.Item>
-          <Form.Item name="use_project_knowledge" label="使用当前项目资料库" valuePropName="checked">
+          <Form.Item name="use_project_knowledge" label="带上当前项目资料库参考" valuePropName="checked">
             <Switch />
           </Form.Item>
           <Form.Item name="use_external_model" label="调用已配置大模型" valuePropName="checked">
