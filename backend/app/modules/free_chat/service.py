@@ -5,6 +5,7 @@ from app.modules.free_chat.schemas import FreeChatMessage, FreeChatResponse, Fre
 from app.modules.knowledge.service import search_project_knowledge
 
 logger = logging.getLogger("uvicorn.error")
+FREE_CHAT_AI_TIMEOUT_SECONDS = 25
 
 
 def answer_free_chat(
@@ -61,6 +62,7 @@ def answer_with_ai(
             f"\n资料库命中：{[source.model_dump() for source in sources]}"
         ),
         user_id=user_id,
+        timeout_seconds_override=FREE_CHAT_AI_TIMEOUT_SECONDS,
     )
     output = result.output
     if output is None or not isinstance(output.get("answer"), str):

@@ -340,6 +340,50 @@ def test_free_chat_reports_ai_success(monkeypatch) -> None:
     assert result["answer"] == "AI 已响应"
 
 
+def test_free_chat_caps_ai_timeout(monkeypatch) -> None:
+    headers = auth_headers()
+    config_response = client.put(
+        "/api/ai/config",
+        headers=headers,
+        json={
+            "provider": "openai-compatible",
+            "base_url": "https://model.example.com/v1",
+            "api_key": "secret",
+            "model": "test-model",
+            "timeout_seconds": 120,
+        },
+    )
+    assert config_response.status_code == 200
+    timeouts: list[int] = []
+
+    def fake_urlopen(req, timeout):
+        timeouts.append(timeout)
+
+        class Response:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def read(self):
+                return json.dumps({"choices": [{"message": {"content": '{"answer":"AI 已响应"}'}}]}).encode("utf-8")
+
+        return Response()
+
+    monkeypatch.setattr("app.modules.ai.service.request.urlopen", fake_urlopen)
+
+    response = client.post(
+        "/api/free-chat/ask",
+        headers=headers,
+        json={"project_id": "project-g99-rfid", "question": "RFID 读取有什么风险", "use_project_knowledge": False, "use_external_model": True},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["ai_status"] == "succeeded"
+    assert timeouts == [25]
+
+
 def test_free_chat_uses_conversation_history_for_follow_up() -> None:
     headers = auth_headers()
     risks = client.post(

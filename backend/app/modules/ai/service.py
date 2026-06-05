@@ -123,12 +123,33 @@ def mask_secret(secret: str) -> str | None:
     return f"{secret[:4]}****{secret[-4:]}"
 
 
-def run_json_task(task_type: str, system_prompt: str, user_prompt: str, user_id: str | None = None) -> dict[str, Any] | None:
-    return run_json_task_detailed(task_type, system_prompt, user_prompt, user_id=user_id).output
+def run_json_task(
+    task_type: str,
+    system_prompt: str,
+    user_prompt: str,
+    user_id: str | None = None,
+    timeout_seconds_override: int | None = None,
+) -> dict[str, Any] | None:
+    return run_json_task_detailed(
+        task_type,
+        system_prompt,
+        user_prompt,
+        user_id=user_id,
+        timeout_seconds_override=timeout_seconds_override,
+    ).output
 
 
-def run_json_task_detailed(task_type: str, system_prompt: str, user_prompt: str, user_id: str | None = None) -> AiTaskResult:
+def run_json_task_detailed(
+    task_type: str,
+    system_prompt: str,
+    user_prompt: str,
+    user_id: str | None = None,
+    timeout_seconds_override: int | None = None,
+) -> AiTaskResult:
     provider, base_url, api_key, model, timeout_seconds = get_ai_runtime_values(user_id)
+    effective_timeout = timeout_seconds
+    if timeout_seconds_override is not None and timeout_seconds_override > 0:
+        effective_timeout = min(timeout_seconds, timeout_seconds_override)
     if provider != "openai-compatible" or not (base_url and api_key and model):
         return AiTaskResult(output=None, status="not_configured", message="AI 未配置，已使用本地规则推荐。")
     url = f"{base_url.rstrip('/')}/chat/completions"
@@ -142,14 +163,14 @@ def run_json_task_detailed(task_type: str, system_prompt: str, user_prompt: str,
         "response_format": {"type": "json_object"},
     }
     try:
-        data = request_chat_completion(url, api_key, payload, timeout_seconds)
+        data = request_chat_completion(url, api_key, payload, effective_timeout)
     except TimeoutError:
         return AiTaskResult(output=None, status="failed", message="AI 调用超时，已使用本地规则推荐。")
     except error.HTTPError as exc:
         if exc.code in {400, 422, 500, 502} and "response_format" in payload:
             fallback_payload = {key: value for key, value in payload.items() if key != "response_format"}
             try:
-                data = request_chat_completion(url, api_key, fallback_payload, timeout_seconds)
+                data = request_chat_completion(url, api_key, fallback_payload, effective_timeout)
             except TimeoutError:
                 return AiTaskResult(output=None, status="failed", message="AI 调用超时，已使用本地规则推荐。")
             except error.HTTPError as fallback_exc:
