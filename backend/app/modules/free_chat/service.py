@@ -1,6 +1,10 @@
+import logging
+
 from app.modules.ai.service import run_json_task_detailed
 from app.modules.free_chat.schemas import FreeChatMessage, FreeChatResponse, FreeChatSource
 from app.modules.knowledge.service import search_project_knowledge
+
+logger = logging.getLogger(__name__)
 
 
 def answer_free_chat(
@@ -17,6 +21,7 @@ def answer_free_chat(
     source_reads = [FreeChatSource(**source.model_dump()) for source in sources]
     if use_external_model:
         ai_answer, ai_status, ai_message = answer_with_ai(question, source_reads, history, user_id)
+        logger.info("free_chat_ai_result status=%s used_model=%s message=%s", ai_status, bool(ai_answer), ai_message)
         if ai_answer:
             return FreeChatResponse(
                 answer=ai_answer,

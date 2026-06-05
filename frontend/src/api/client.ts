@@ -858,15 +858,21 @@ export async function askFreeChat(
   useProjectKnowledge: boolean,
   useExternalModel: boolean,
   messages: FreeChatMessage[] = [],
+  signal?: AbortSignal,
 ) {
-  return request<FreeChatResponse>("/api/free-chat/ask", {
-    method: "POST",
-    body: JSON.stringify({
-      project_id: projectId,
-      question,
-      use_project_knowledge: useProjectKnowledge,
-      use_external_model: useExternalModel,
-      messages,
-    }),
-  });
+  try {
+    return await request<FreeChatResponse>("/api/free-chat/ask", {
+      method: "POST",
+      signal,
+      body: JSON.stringify({
+        project_id: projectId,
+        question,
+        use_project_knowledge: useProjectKnowledge,
+        use_external_model: useExternalModel,
+        messages,
+      }),
+    });
+  } catch (error) {
+    throw new Error(abortErrorMessage(error, "自由应用等待超时，请检查模型服务响应或稍后重试。") ?? (error instanceof Error ? error.message : "自由应用提问失败"));
+  }
 }

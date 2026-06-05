@@ -25,9 +25,11 @@ export default function FreeChatPage() {
     if (!currentProject) return;
     const history = messages.map((item) => ({ role: item.role, content: item.content }));
     const userMessage: FreeChatMessage = { role: "user", content: values.question };
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), 60000);
     setMessages((current) => [...current, userMessage]);
     setLoading(true);
-    askFreeChat(currentProject.id, values.question, values.use_project_knowledge, values.use_external_model, history)
+    askFreeChat(currentProject.id, values.question, values.use_project_knowledge, values.use_external_model, history, controller.signal)
       .then((result) => {
         setLastAiStatus({ ai_status: result.ai_status, ai_message: result.ai_message, used_model: result.used_model });
         setMessages((current) => [
@@ -45,9 +47,13 @@ export default function FreeChatPage() {
       })
       .catch((error: Error) => {
         setMessages((current) => current.slice(0, -1));
+        setLastAiStatus({ ai_status: "failed", ai_message: error.message, used_model: false });
         message.error(`提问失败：${error.message}`);
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        window.clearTimeout(timeoutId);
+        setLoading(false);
+      });
   }
 
   return (
