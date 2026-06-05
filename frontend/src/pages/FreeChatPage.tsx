@@ -47,7 +47,9 @@ export default function FreeChatPage() {
       })
       .catch((error: Error) => {
         setMessages((current) => current.slice(0, -1));
-        setLastAiStatus({ ai_status: "failed", ai_message: error.message, used_model: false });
+        if (!error.message.includes("登录已过期")) {
+          setLastAiStatus({ ai_status: "failed", ai_message: error.message, used_model: false });
+        }
         message.error(`提问失败：${error.message}`);
       })
       .finally(() => {

@@ -351,6 +351,22 @@ export function clearToken() {
   window.localStorage.removeItem(TOKEN_KEY);
 }
 
+async function parseErrorMessage(response: Response) {
+  const text = await response.text();
+  if (response.status === 401) {
+    clearToken();
+    return "登录已过期，请重新登录。";
+  }
+  if (!text) return `请求失败：HTTP ${response.status}`;
+  try {
+    const data = JSON.parse(text) as { detail?: unknown };
+    if (typeof data.detail === "string") return data.detail;
+  } catch {
+    return text;
+  }
+  return text;
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = getToken();
   const response = await fetch(path, {
@@ -363,7 +379,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   });
 
   if (!response.ok) {
-    throw new Error(await response.text());
+    throw new Error(await parseErrorMessage(response));
   }
 
   if (response.status === 204) {
@@ -385,7 +401,7 @@ async function requestBlob(path: string, options: RequestInit = {}) {
   });
 
   if (!response.ok) {
-    throw new Error(await response.text());
+    throw new Error(await parseErrorMessage(response));
   }
 
   return response.blob();
