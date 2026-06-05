@@ -34,7 +34,7 @@ def answer_free_chat(
                 ai_message=ai_message,
             )
         return FreeChatResponse(
-            answer=build_local_answer(question, source_reads, history),
+            answer=build_ai_failure_answer(question, source_reads, history, use_project_knowledge),
             used_model=False,
             sources=source_reads,
             ai_status=ai_status,
@@ -89,6 +89,13 @@ def build_ai_knowledge_prompt(sources: list[FreeChatSource]) -> str:
     if not sources:
         return "项目资料库没有命中内容，请基于当前对话和你的通用知识回答。"
     return str([source.model_dump() for source in sources])
+
+
+def build_ai_failure_answer(question: str, sources: list[FreeChatSource], history: list[FreeChatMessage], use_project_knowledge: bool) -> str:
+    if use_project_knowledge:
+        return build_local_answer(question, sources, history)
+    context_note = "已读取当前对话上下文。" if history else ""
+    return f"{context_note}本次未启用项目资料库参考，但 AI 模型没有在超时时间内返回结果。请稍后重试，或检查系统设置中的 AI 模型配置。"
 
 
 def build_local_answer(question: str, sources: list[FreeChatSource], history: list[FreeChatMessage]) -> str:

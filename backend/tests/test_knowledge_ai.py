@@ -465,6 +465,8 @@ def test_free_chat_returns_when_ai_call_hangs(monkeypatch) -> None:
     assert result["used_model"] is False
     assert result["ai_status"] == "failed"
     assert "AI 调用超时" in result["ai_message"]
+    assert "未启用项目资料库参考" in result["answer"]
+    assert "项目资料库没有命中" not in result["answer"]
 
 
 def test_free_chat_uses_conversation_history_for_follow_up() -> None:
