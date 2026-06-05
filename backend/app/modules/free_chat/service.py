@@ -1,12 +1,11 @@
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 import logging
 
-from app.modules.ai.service import run_json_task_detailed
+from app.modules.ai.service import get_ai_runtime_values, run_json_task_detailed
 from app.modules.free_chat.schemas import FreeChatMessage, FreeChatResponse, FreeChatSource
 from app.modules.knowledge.service import search_project_knowledge
 
 logger = logging.getLogger("uvicorn.error")
-FREE_CHAT_AI_TIMEOUT_SECONDS = 25
 AI_EXECUTOR = ThreadPoolExecutor(max_workers=4)
 
 
@@ -55,16 +54,16 @@ def answer_with_ai(
     use_project_knowledge: bool = True,
 ) -> tuple[str | None, str, str]:
     knowledge_prompt = build_ai_knowledge_prompt(sources) if use_project_knowledge else "本次未启用项目资料库检索，请基于当前对话和你的通用知识回答。"
+    timeout_seconds = get_ai_runtime_values(user_id)[4]
     future = AI_EXECUTOR.submit(
         run_json_task_detailed,
         "free_chat",
         "你是基因测序仪测试知识问答助手。只输出 JSON，不输出解释。",
         build_ai_prompt(question, history, knowledge_prompt),
         user_id,
-        FREE_CHAT_AI_TIMEOUT_SECONDS,
     )
     try:
-        result = future.result(timeout=FREE_CHAT_AI_TIMEOUT_SECONDS)
+        result = future.result(timeout=timeout_seconds)
     except FutureTimeoutError:
         future.cancel()
         return None, "failed", "AI 调用超时，已使用本地规则推荐。"

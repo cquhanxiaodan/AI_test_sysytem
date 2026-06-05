@@ -341,7 +341,7 @@ def test_free_chat_reports_ai_success(monkeypatch) -> None:
     assert result["answer"] == "AI 已响应"
 
 
-def test_free_chat_caps_ai_timeout(monkeypatch) -> None:
+def test_free_chat_uses_configured_ai_timeout(monkeypatch) -> None:
     headers = auth_headers()
     config_response = client.put(
         "/api/ai/config",
@@ -382,7 +382,7 @@ def test_free_chat_caps_ai_timeout(monkeypatch) -> None:
 
     assert response.status_code == 200
     assert response.json()["ai_status"] == "succeeded"
-    assert timeouts == [25]
+    assert timeouts == [120]
 
 
 def test_free_chat_without_project_knowledge_allows_general_ai_answer(monkeypatch) -> None:
@@ -447,7 +447,7 @@ def test_free_chat_returns_when_ai_call_hangs(monkeypatch) -> None:
         },
     )
     assert config_response.status_code == 200
-    monkeypatch.setattr("app.modules.free_chat.service.FREE_CHAT_AI_TIMEOUT_SECONDS", 0.01)
+    monkeypatch.setattr("app.modules.free_chat.service.get_ai_runtime_values", lambda user_id=None: ("openai-compatible", "https://model.example.com/v1", "secret", "test-model", 0.01))
 
     def fake_run_json_task_detailed(*args, **kwargs):
         time.sleep(0.1)
