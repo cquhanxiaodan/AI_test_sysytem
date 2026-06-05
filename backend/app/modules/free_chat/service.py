@@ -4,7 +4,7 @@ from app.modules.ai.service import run_json_task_detailed
 from app.modules.free_chat.schemas import FreeChatMessage, FreeChatResponse, FreeChatSource
 from app.modules.knowledge.service import search_project_knowledge
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("uvicorn.error")
 
 
 def answer_free_chat(
