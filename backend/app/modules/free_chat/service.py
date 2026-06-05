@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 import logging
 
 from app.modules.ai.service import run_json_task_detailed
@@ -6,6 +7,7 @@ from app.modules.knowledge.service import search_project_knowledge
 
 logger = logging.getLogger("uvicorn.error")
 FREE_CHAT_AI_TIMEOUT_SECONDS = 25
+AI_EXECUTOR = ThreadPoolExecutor(max_workers=4)
 
 
 def answer_free_chat(
@@ -53,24 +55,34 @@ def answer_with_ai(
     use_project_knowledge: bool = True,
 ) -> tuple[str | None, str, str]:
     knowledge_prompt = build_ai_knowledge_prompt(sources) if use_project_knowledge else "本次未启用项目资料库检索，请基于当前对话和你的通用知识回答。"
-    result = run_json_task_detailed(
+    future = AI_EXECUTOR.submit(
+        run_json_task_detailed,
         "free_chat",
         "你是基因测序仪测试知识问答助手。只输出 JSON，不输出解释。",
-        (
-            "基于当前对话上下文和用户最新问题回答。输出 answer 字段。"
-            "如果提供了项目资料库命中内容，将其作为参考上下文使用；回答可以结合你的通用知识进行扩展。"
-            "当资料库没有命中或未启用资料库时，直接基于通用知识给出有帮助的回答。"
-            f"\n最近对话：{[message.model_dump() for message in history[-8:]]}"
-            f"\n问题：{question}"
-            f"\n资料库参考：{knowledge_prompt}"
-        ),
-        user_id=user_id,
-        timeout_seconds_override=FREE_CHAT_AI_TIMEOUT_SECONDS,
+        build_ai_prompt(question, history, knowledge_prompt),
+        user_id,
+        FREE_CHAT_AI_TIMEOUT_SECONDS,
     )
+    try:
+        result = future.result(timeout=FREE_CHAT_AI_TIMEOUT_SECONDS)
+    except FutureTimeoutError:
+        future.cancel()
+        return None, "failed", "AI 调用超时，已使用本地规则推荐。"
     output = result.output
     if output is None or not isinstance(output.get("answer"), str):
         return None, result.status, result.message
     return output["answer"], result.status, result.message
+
+
+def build_ai_prompt(question: str, history: list[FreeChatMessage], knowledge_prompt: str) -> str:
+    return (
+        "基于当前对话上下文和用户最新问题回答。输出 answer 字段。"
+        "如果提供了项目资料库命中内容，将其作为参考上下文使用；回答可以结合你的通用知识进行扩展。"
+        "当资料库没有命中或未启用资料库时，直接基于通用知识给出有帮助的回答。"
+        f"\n最近对话：{[message.model_dump() for message in history[-8:]]}"
+        f"\n问题：{question}"
+        f"\n资料库参考：{knowledge_prompt}"
+    )
 
 
 def build_ai_knowledge_prompt(sources: list[FreeChatSource]) -> str:

@@ -1,5 +1,6 @@
 from fastapi.testclient import TestClient
 import json
+import time
 from urllib import error
 from uuid import uuid4
 
@@ -430,6 +431,40 @@ def test_free_chat_without_project_knowledge_allows_general_ai_answer(monkeypatc
     assert result["sources"] == []
     assert "通用知识" in prompts[0]
     assert "资料不足时说明需要补充资料" not in prompts[0]
+
+
+def test_free_chat_returns_when_ai_call_hangs(monkeypatch) -> None:
+    headers = auth_headers()
+    config_response = client.put(
+        "/api/ai/config",
+        headers=headers,
+        json={
+            "provider": "openai-compatible",
+            "base_url": "https://model.example.com/v1",
+            "api_key": "secret",
+            "model": "test-model",
+            "timeout_seconds": 20,
+        },
+    )
+    assert config_response.status_code == 200
+    monkeypatch.setattr("app.modules.free_chat.service.FREE_CHAT_AI_TIMEOUT_SECONDS", 0.01)
+
+    def fake_run_json_task_detailed(*args, **kwargs):
+        time.sleep(0.1)
+
+    monkeypatch.setattr("app.modules.free_chat.service.run_json_task_detailed", fake_run_json_task_detailed)
+
+    response = client.post(
+        "/api/free-chat/ask",
+        headers=headers,
+        json={"project_id": "project-g99-rfid", "question": "如何扩展 RFID 测试？", "use_project_knowledge": False, "use_external_model": True},
+    )
+
+    assert response.status_code == 200
+    result = response.json()
+    assert result["used_model"] is False
+    assert result["ai_status"] == "failed"
+    assert "AI 调用超时" in result["ai_message"]
 
 
 def test_free_chat_uses_conversation_history_for_follow_up() -> None:
