@@ -1,6 +1,6 @@
 import { Alert, Button, Card, Form, Input, List, Space, Switch, Tag, Typography, message } from "antd";
-import { useState } from "react";
-import { askFreeChat, FreeChatMessage, FreeChatResponse } from "../api/client";
+import { useEffect, useState } from "react";
+import { askFreeChat, fetchAiConfig, FreeChatMessage, FreeChatResponse } from "../api/client";
 import { useProjects } from "../context/ProjectContext";
 
 type ChatForm = {
@@ -13,6 +13,7 @@ export default function FreeChatPage() {
   const { currentProject } = useProjects();
   const [form] = Form.useForm<ChatForm>();
   const [loading, setLoading] = useState(false);
+  const [aiTimeoutSeconds, setAiTimeoutSeconds] = useState(120);
   const [lastAiStatus, setLastAiStatus] = useState<Pick<FreeChatResponse, "ai_status" | "ai_message" | "used_model"> | null>(null);
   const [messages, setMessages] = useState<Array<FreeChatMessage & {
     used_model?: boolean;
@@ -21,12 +22,18 @@ export default function FreeChatPage() {
     ai_message?: string;
   }>>([]);
 
+  useEffect(() => {
+    fetchAiConfig()
+      .then((config) => setAiTimeoutSeconds(config.timeout_seconds))
+      .catch(() => undefined);
+  }, []);
+
   function submit(values: ChatForm) {
     if (!currentProject) return;
     const history = messages.map((item) => ({ role: item.role, content: item.content }));
     const userMessage: FreeChatMessage = { role: "user", content: values.question };
     const controller = new AbortController();
-    const timeoutId = window.setTimeout(() => controller.abort(), 60000);
+    const timeoutId = window.setTimeout(() => controller.abort(), (aiTimeoutSeconds + 10) * 1000);
     setMessages((current) => [...current, userMessage]);
     setLoading(true);
     askFreeChat(currentProject.id, values.question, values.use_project_knowledge, values.use_external_model, history, controller.signal)
@@ -80,7 +87,7 @@ export default function FreeChatPage() {
                   title={
                     <Space>
                       <Tag color={item.role === "user" ? "blue" : item.used_model ? "green" : "default"}>
-                        {item.role === "user" ? "我" : item.used_model ? "大模型回答" : "本地资料命中"}
+                        {getMessageTag(item)}
                       </Tag>
                       <span>第 {index + 1} 条</span>
                     </Space>
@@ -92,7 +99,7 @@ export default function FreeChatPage() {
                     style={{ marginBottom: 12 }}
                     type={item.used_model ? "success" : item.ai_status === "failed" ? "warning" : "info"}
                     showIcon
-                    message={item.used_model ? "AI 模型已成功响应" : "已使用本地资料回答"}
+                    message={getAiStatusTitle(item)}
                     description={item.ai_message}
                   />
                 )}
@@ -119,7 +126,7 @@ export default function FreeChatPage() {
             style={{ marginBottom: 16 }}
             type={lastAiStatus.used_model ? "success" : lastAiStatus.ai_status === "failed" ? "warning" : "info"}
             showIcon
-            message={lastAiStatus.used_model ? "上次提问已成功调用 AI 模型" : "上次提问未使用 AI 模型回答"}
+            message={getLastAiStatusTitle(lastAiStatus)}
             description={lastAiStatus.ai_message}
           />
         )}
@@ -138,4 +145,25 @@ export default function FreeChatPage() {
       </Card>
     </section>
   );
+}
+
+function getMessageTag(item: FreeChatMessage & { used_model?: boolean; ai_status?: string; sources?: FreeChatResponse["sources"] }) {
+  if (item.role === "user") return "我";
+  if (item.used_model) return "大模型回答";
+  if (item.ai_status === "failed") return "AI 调用失败";
+  return item.sources && item.sources.length > 0 ? "本地资料命中" : "本地兜底回答";
+}
+
+function getAiStatusTitle(status: { ai_status?: string; used_model?: boolean }) {
+  if (status.used_model) return "AI 模型已成功响应";
+  if (status.ai_status === "failed") return "AI 模型未返回有效回答";
+  if (status.ai_status === "not_configured") return "AI 模型未配置";
+  return "已使用本地资料回答";
+}
+
+function getLastAiStatusTitle(status: Pick<FreeChatResponse, "ai_status" | "used_model">) {
+  if (status.used_model) return "上次提问已成功调用 AI 模型";
+  if (status.ai_status === "failed") return "上次提问 AI 模型未返回有效回答";
+  if (status.ai_status === "not_configured") return "上次提问未配置 AI 模型";
+  return "上次提问使用本地资料回答";
 }

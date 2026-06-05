@@ -889,6 +889,6 @@ export async function askFreeChat(
       }),
     });
   } catch (error) {
-    throw new Error(abortErrorMessage(error, "自由应用等待超时，请检查模型服务响应或稍后重试。") ?? (error instanceof Error ? error.message : "自由应用提问失败"));
+    throw new Error(abortErrorMessage(error, "自由应用已达到系统设置的 AI 超时时间，请检查模型服务响应或稍后重试。") ?? (error instanceof Error ? error.message : "自由应用提问失败"));
   }
 }
