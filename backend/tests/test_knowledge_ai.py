@@ -448,6 +448,7 @@ def test_free_chat_returns_when_ai_call_hangs(monkeypatch) -> None:
     )
     assert config_response.status_code == 200
     monkeypatch.setattr("app.modules.free_chat.service.get_ai_runtime_values", lambda user_id=None: ("openai-compatible", "https://model.example.com/v1", "secret", "test-model", 0.01))
+    monkeypatch.setattr("app.modules.free_chat.service.AI_TIMEOUT_BUFFER_SECONDS", 0.01)
 
     def fake_run_json_task_detailed(*args, **kwargs):
         time.sleep(0.1)

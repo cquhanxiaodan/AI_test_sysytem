@@ -1,5 +1,6 @@
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 import logging
+from time import monotonic
 
 from app.modules.ai.service import get_ai_runtime_values, run_json_task_detailed
 from app.modules.free_chat.schemas import FreeChatMessage, FreeChatResponse, FreeChatSource
@@ -7,6 +8,7 @@ from app.modules.knowledge.service import search_project_knowledge
 
 logger = logging.getLogger("uvicorn.error")
 AI_EXECUTOR = ThreadPoolExecutor(max_workers=4)
+AI_TIMEOUT_BUFFER_SECONDS = 5
 
 
 def answer_free_chat(
@@ -23,7 +25,6 @@ def answer_free_chat(
     source_reads = [FreeChatSource(**source.model_dump()) for source in sources]
     if use_external_model:
         ai_answer, ai_status, ai_message = answer_with_ai(question, source_reads, history, user_id, use_project_knowledge)
-        logger.info("free_chat_ai_result status=%s used_model=%s message=%s", ai_status, bool(ai_answer), ai_message)
         if ai_answer:
             return FreeChatResponse(
                 answer=ai_answer,
@@ -55,6 +56,7 @@ def answer_with_ai(
 ) -> tuple[str | None, str, str]:
     knowledge_prompt = build_ai_knowledge_prompt(sources) if use_project_knowledge else "本次未启用项目资料库检索，请基于当前对话和你的通用知识回答。"
     timeout_seconds = get_ai_runtime_values(user_id)[4]
+    started_at = monotonic()
     future = AI_EXECUTOR.submit(
         run_json_task_detailed,
         "free_chat",
@@ -63,13 +65,33 @@ def answer_with_ai(
         user_id,
     )
     try:
-        result = future.result(timeout=timeout_seconds)
+        result = future.result(timeout=timeout_seconds + AI_TIMEOUT_BUFFER_SECONDS)
     except FutureTimeoutError:
         future.cancel()
+        logger.info(
+            "free_chat_ai_result status=failed used_model=False elapsed=%.2fs timeout=%ss message=%s",
+            monotonic() - started_at,
+            timeout_seconds,
+            "AI 调用超时，已使用本地规则推荐。",
+        )
         return None, "failed", "AI 调用超时，已使用本地规则推荐。"
     output = result.output
     if output is None or not isinstance(output.get("answer"), str):
+        logger.info(
+            "free_chat_ai_result status=%s used_model=False elapsed=%.2fs timeout=%ss message=%s",
+            result.status,
+            monotonic() - started_at,
+            timeout_seconds,
+            result.message,
+        )
         return None, result.status, result.message
+    logger.info(
+        "free_chat_ai_result status=%s used_model=True elapsed=%.2fs timeout=%ss message=%s",
+        result.status,
+        monotonic() - started_at,
+        timeout_seconds,
+        result.message,
+    )
     return output["answer"], result.status, result.message
 
 
