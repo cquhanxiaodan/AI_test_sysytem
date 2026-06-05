@@ -123,12 +123,12 @@ def mask_secret(secret: str) -> str | None:
     return f"{secret[:4]}****{secret[-4:]}"
 
 
-def run_json_task(task_type: str, system_prompt: str, user_prompt: str) -> dict[str, Any] | None:
-    return run_json_task_detailed(task_type, system_prompt, user_prompt).output
+def run_json_task(task_type: str, system_prompt: str, user_prompt: str, user_id: str | None = None) -> dict[str, Any] | None:
+    return run_json_task_detailed(task_type, system_prompt, user_prompt, user_id=user_id).output
 
 
-def run_json_task_detailed(task_type: str, system_prompt: str, user_prompt: str) -> AiTaskResult:
-    provider, base_url, api_key, model, timeout_seconds = get_ai_runtime_values()
+def run_json_task_detailed(task_type: str, system_prompt: str, user_prompt: str, user_id: str | None = None) -> AiTaskResult:
+    provider, base_url, api_key, model, timeout_seconds = get_ai_runtime_values(user_id)
     if provider != "openai-compatible" or not (base_url and api_key and model):
         return AiTaskResult(output=None, status="not_configured", message="AI 未配置，已使用本地规则推荐。")
     url = f"{base_url.rstrip('/')}/chat/completions"

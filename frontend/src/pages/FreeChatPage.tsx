@@ -1,4 +1,4 @@
-import { Button, Card, Form, Input, List, Space, Switch, Tag, Typography, message } from "antd";
+import { Alert, Button, Card, Form, Input, List, Space, Switch, Tag, Typography, message } from "antd";
 import { useState } from "react";
 import { askFreeChat, FreeChatMessage, FreeChatResponse } from "../api/client";
 import { useProjects } from "../context/ProjectContext";
@@ -13,7 +13,13 @@ export default function FreeChatPage() {
   const { currentProject } = useProjects();
   const [form] = Form.useForm<ChatForm>();
   const [loading, setLoading] = useState(false);
-  const [messages, setMessages] = useState<Array<FreeChatMessage & { used_model?: boolean; sources?: FreeChatResponse["sources"] }>>([]);
+  const [lastAiStatus, setLastAiStatus] = useState<Pick<FreeChatResponse, "ai_status" | "ai_message" | "used_model"> | null>(null);
+  const [messages, setMessages] = useState<Array<FreeChatMessage & {
+    used_model?: boolean;
+    sources?: FreeChatResponse["sources"];
+    ai_status?: string;
+    ai_message?: string;
+  }>>([]);
 
   function submit(values: ChatForm) {
     if (!currentProject) return;
@@ -23,9 +29,17 @@ export default function FreeChatPage() {
     setLoading(true);
     askFreeChat(currentProject.id, values.question, values.use_project_knowledge, values.use_external_model, history)
       .then((result) => {
+        setLastAiStatus({ ai_status: result.ai_status, ai_message: result.ai_message, used_model: result.used_model });
         setMessages((current) => [
           ...current,
-          { role: "assistant", content: result.answer, used_model: result.used_model, sources: result.sources },
+          {
+            role: "assistant",
+            content: result.answer,
+            used_model: result.used_model,
+            sources: result.sources,
+            ai_status: result.ai_status,
+            ai_message: result.ai_message,
+          },
         ]);
         form.setFieldsValue({ question: "" });
       })
@@ -65,6 +79,15 @@ export default function FreeChatPage() {
                   }
                   description={<Typography.Paragraph style={{ whiteSpace: "pre-wrap" }}>{item.content}</Typography.Paragraph>}
                 />
+                {item.role === "assistant" && item.ai_message && (
+                  <Alert
+                    style={{ marginBottom: 12 }}
+                    type={item.used_model ? "success" : item.ai_status === "failed" ? "warning" : "info"}
+                    showIcon
+                    message={item.used_model ? "AI 模型已成功响应" : "已使用本地资料回答"}
+                    description={item.ai_message}
+                  />
+                )}
                 {item.sources && item.sources.length > 0 && (
                   <List
                     size="small"
@@ -83,6 +106,15 @@ export default function FreeChatPage() {
         )}
       </Card>
       <Card title="继续提问" className="section-card">
+        {lastAiStatus && (
+          <Alert
+            style={{ marginBottom: 16 }}
+            type={lastAiStatus.used_model ? "success" : lastAiStatus.ai_status === "failed" ? "warning" : "info"}
+            showIcon
+            message={lastAiStatus.used_model ? "上次提问已成功调用 AI 模型" : "上次提问未使用 AI 模型回答"}
+            description={lastAiStatus.ai_message}
+          />
+        )}
         <Form form={form} layout="vertical" onFinish={submit} initialValues={{ use_project_knowledge: true, use_external_model: true }}>
           <Form.Item name="question" label="问题" rules={[{ required: true, message: "请输入问题" }]}> 
             <Input.TextArea rows={4} placeholder="例如：G99 ECR4.0 需要重点关注哪些历史风险和回归测试？也可以继续追问：这些风险里哪些要进入验证方案？" />

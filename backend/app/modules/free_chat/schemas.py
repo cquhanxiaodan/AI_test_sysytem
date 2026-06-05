@@ -26,3 +26,5 @@ class FreeChatResponse(BaseModel):
     answer: str
     used_model: bool
     sources: list[FreeChatSource]
+    ai_status: str = "not_requested"
+    ai_message: str = "未请求 AI 模型。"

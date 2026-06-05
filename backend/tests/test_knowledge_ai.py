@@ -274,8 +274,70 @@ def test_free_chat_returns_local_knowledge_answer() -> None:
     assert response.status_code == 200
     result = response.json()
     assert result["used_model"] is False
+    assert result["ai_status"] == "not_requested"
+    assert result["ai_message"] == "未请求 AI 模型。"
     assert result["sources"]
     assert "RFID" in result["answer"]
+
+
+def test_free_chat_reports_ai_not_configured() -> None:
+    headers = auth_headers()
+
+    response = client.post(
+        "/api/free-chat/ask",
+        headers=headers,
+        json={"project_id": "project-g99-rfid", "question": "RFID 读取有什么风险", "use_project_knowledge": False, "use_external_model": True},
+    )
+
+    assert response.status_code == 200
+    result = response.json()
+    assert result["used_model"] is False
+    assert result["ai_status"] == "not_configured"
+    assert "AI 未配置" in result["ai_message"]
+
+
+def test_free_chat_reports_ai_success(monkeypatch) -> None:
+    headers = auth_headers()
+    config_response = client.put(
+        "/api/ai/config",
+        headers=headers,
+        json={
+            "provider": "openai-compatible",
+            "base_url": "https://model.example.com/v1",
+            "api_key": "secret",
+            "model": "test-model",
+            "timeout_seconds": 20,
+        },
+    )
+    assert config_response.status_code == 200
+
+    def fake_urlopen(req, timeout):
+        class Response:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def read(self):
+                return json.dumps({"choices": [{"message": {"content": '{"answer":"AI 已响应"}'}}]}).encode("utf-8")
+
+        return Response()
+
+    monkeypatch.setattr("app.modules.ai.service.request.urlopen", fake_urlopen)
+
+    response = client.post(
+        "/api/free-chat/ask",
+        headers=headers,
+        json={"project_id": "project-g99-rfid", "question": "RFID 读取有什么风险", "use_project_knowledge": False, "use_external_model": True},
+    )
+
+    assert response.status_code == 200
+    result = response.json()
+    assert result["used_model"] is True
+    assert result["ai_status"] == "succeeded"
+    assert result["ai_message"] == "AI 调用成功。"
+    assert result["answer"] == "AI 已响应"
 
 
 def test_free_chat_uses_conversation_history_for_follow_up() -> None:

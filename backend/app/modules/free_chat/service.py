@@ -1,4 +1,4 @@
-from app.modules.ai.service import run_json_task
+from app.modules.ai.service import run_json_task_detailed
 from app.modules.free_chat.schemas import FreeChatMessage, FreeChatResponse, FreeChatSource
 from app.modules.knowledge.service import search_project_knowledge
 
@@ -9,20 +9,43 @@ def answer_free_chat(
     use_project_knowledge: bool,
     use_external_model: bool,
     messages: list[FreeChatMessage] | None = None,
+    user_id: str | None = None,
 ) -> FreeChatResponse:
     history = normalize_history(messages or [])
     query = build_context_query(question, history)
     sources = search_project_knowledge(project_id, query)[:8] if use_project_knowledge else []
     source_reads = [FreeChatSource(**source.model_dump()) for source in sources]
     if use_external_model:
-        ai_answer = answer_with_ai(question, source_reads, history)
+        ai_answer, ai_status, ai_message = answer_with_ai(question, source_reads, history, user_id)
         if ai_answer:
-            return FreeChatResponse(answer=ai_answer, used_model=True, sources=source_reads)
-    return FreeChatResponse(answer=build_local_answer(question, source_reads, history), used_model=False, sources=source_reads)
+            return FreeChatResponse(
+                answer=ai_answer,
+                used_model=True,
+                sources=source_reads,
+                ai_status=ai_status,
+                ai_message=ai_message,
+            )
+        return FreeChatResponse(
+            answer=build_local_answer(question, source_reads, history),
+            used_model=False,
+            sources=source_reads,
+            ai_status=ai_status,
+            ai_message=ai_message,
+        )
+    return FreeChatResponse(
+        answer=build_local_answer(question, source_reads, history),
+        used_model=False,
+        sources=source_reads,
+    )
 
 
-def answer_with_ai(question: str, sources: list[FreeChatSource], history: list[FreeChatMessage]) -> str | None:
-    output = run_json_task(
+def answer_with_ai(
+    question: str,
+    sources: list[FreeChatSource],
+    history: list[FreeChatMessage],
+    user_id: str | None = None,
+) -> tuple[str | None, str, str]:
+    result = run_json_task_detailed(
         "free_chat",
         "你是基因测序仪测试知识问答助手。只输出 JSON，不输出解释。",
         (
@@ -32,10 +55,12 @@ def answer_with_ai(question: str, sources: list[FreeChatSource], history: list[F
             f"\n问题：{question}"
             f"\n资料库命中：{[source.model_dump() for source in sources]}"
         ),
+        user_id=user_id,
     )
+    output = result.output
     if output is None or not isinstance(output.get("answer"), str):
-        return None
-    return output["answer"]
+        return None, result.status, result.message
+    return output["answer"], result.status, result.message
 
 
 def build_local_answer(question: str, sources: list[FreeChatSource], history: list[FreeChatMessage]) -> str:

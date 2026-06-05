@@ -19,4 +19,5 @@ def ask(payload: FreeChatRequest, current_user: SeedUser = Depends(get_current_u
         payload.use_project_knowledge,
         payload.use_external_model,
         payload.messages,
+        current_user.id,
     )

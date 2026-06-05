@@ -312,6 +312,8 @@ export type FreeChatResponse = {
   answer: string;
   used_model: boolean;
   sources: Array<{ source_type: string; source_id: string; title: string; text: string; score: number }>;
+  ai_status: string;
+  ai_message: string;
 };
 
 export type FreeChatMessage = {
